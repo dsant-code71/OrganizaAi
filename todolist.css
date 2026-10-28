@@ -1,0 +1,94 @@
+/* Estilos simples com tons de cinza */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #0f0f0f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+
+.todo-container {
+    width: 100%;
+    max-width: 400px;
+    background: #252525;
+    padding: 20px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    display: g;
+}
+
+h1 {
+    text-align: center;
+    color: #05cdff;
+}
+
+.input-group {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+input[type="text"] {
+    width: 70%;
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: 2px solid #000000;
+    background-color: #0f0f0f;
+    color: #05cdff;
+}
+
+button {
+    width: 90%;
+    background-color: #0f0f0f;
+    color: #05cdff;
+    border: none;
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#addBtn {
+    width: 24%;
+    border: solid 2px #000000;
+}
+
+button:hover {
+    background-color:#05cdff;
+    color: #0f0f0f;
+   
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+li {
+    display: grid;
+    padding: 10px ;
+    background-color: #000000;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    color: #05cdff;
+    grid-template-columns: 50% 25% 25%;
+
+}
+
+.remove-btn {
+    background-color: #888;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.remove-btn:hover {
+    background-color: #777777;
+}
+
