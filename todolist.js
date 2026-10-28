@@ -1,6 +1,8 @@
 var STORAGE_KEY = 'tarefasSalvas';
 var PRIORIDADES_VALIDAS = ['nenhuma', 'alta', 'média', 'baixa'];
+var PRIORIDADE_PESO = { alta: 0, 'média': 1, baixa: 2, nenhuma: 3 };
 var filtroAtual = 'todas';
+var animacoesReordenacao = new WeakMap();
 
 function gerarId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -41,9 +43,9 @@ function lerTarefas() {
             return [];
         }
 
-        return tarefasSalvas.filter(function (tarefa) {
+        return ordenarPorPrioridade(tarefasSalvas.filter(function (tarefa) {
             return tarefa && typeof tarefa.texto === 'string' && tarefa.texto.trim() !== '';
-        });
+        }));
     } catch (erro) {
         console.warn('Não foi possível ler as tarefas salvas.', erro);
         return [];
@@ -52,7 +54,7 @@ function lerTarefas() {
 
 function salvarTarefas(tarefas) {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(tarefas));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(ordenarPorPrioridade(tarefas)));
     } catch (erro) {
         console.warn('Não foi possível salvar as tarefas.', erro);
     }
@@ -85,6 +87,7 @@ function adicionarTarefa() {
         salvarTarefa(tarefaTexto, id);
         document.getElementById('tarefaInput').value = '';
         document.getElementById('addBtn').disabled = true;
+        reordenarTarefas();
         filtrarTarefas(filtroAtual);
     } else {
         alert('Por favor, insira uma tarefa.');
@@ -164,9 +167,17 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
     aplicarEstiloPrioridade(novaTarefa, prioridade);
 
     dropdownPrioridade.addEventListener('change', function () {
+        var prioridadeAnterior = novaTarefa.dataset.prioridade;
         prioridade = dropdownPrioridade.value;
         aplicarEstiloPrioridade(novaTarefa, prioridade);
         atualizarTarefa(id, novaTarefa.dataset.concluida, prioridade);
+
+        var subiuPrioridade = obterPesoPrioridade(prioridade) < obterPesoPrioridade(prioridadeAnterior);
+
+        reordenarTarefas({
+            animar: true,
+            destaque: subiuPrioridade ? novaTarefa : null
+        });
     });
 
     novaTarefa.appendChild(textoTarefa);
@@ -178,6 +189,108 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
 
 function aplicarEstiloPrioridade(tarefa, prioridade) {
     tarefa.dataset.prioridade = PRIORIDADES_VALIDAS.indexOf(prioridade) !== -1 ? prioridade : 'nenhuma';
+}
+
+function obterPesoPrioridade(prioridade) {
+    return Object.prototype.hasOwnProperty.call(PRIORIDADE_PESO, prioridade)
+        ? PRIORIDADE_PESO[prioridade]
+        : PRIORIDADE_PESO.nenhuma;
+}
+
+function ordenarPorPrioridade(tarefas) {
+    return tarefas
+        .map(function (tarefa, indice) {
+            return { tarefa: tarefa, indice: indice };
+        })
+        .sort(function (a, b) {
+            var diferenca = obterPesoPrioridade(a.tarefa.prioridade) - obterPesoPrioridade(b.tarefa.prioridade);
+            return diferenca !== 0 ? diferenca : a.indice - b.indice;
+        })
+        .map(function (item) {
+            return item.tarefa;
+        });
+}
+
+function reordenarTarefas(opcoes) {
+    var lista = document.getElementById('listaTarefas');
+    var animar = !!(opcoes && opcoes.animar);
+    var destaque = (opcoes && opcoes.destaque) || null;
+    var prefereMenosMovimento = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    animar = animar && !prefereMenosMovimento;
+
+    Array.prototype.forEach.call(lista.children, function (tarefa) {
+        if (animacoesReordenacao.has(tarefa)) {
+            animacoesReordenacao.get(tarefa).cancel();
+            animacoesReordenacao.delete(tarefa);
+        }
+        if (tarefa._removerDestaque) {
+            window.clearTimeout(tarefa._removerDestaque);
+            tarefa._removerDestaque = null;
+        }
+        tarefa.classList.remove('reordering');
+    });
+
+    var tarefas = Array.prototype.map.call(lista.children, function (tarefa, indice) {
+        return {
+            elemento: tarefa,
+            indice: indice,
+            topoAnterior: animar ? tarefa.getBoundingClientRect().top : 0
+        };
+    });
+
+    tarefas.sort(function (a, b) {
+        var diferenca = obterPesoPrioridade(a.elemento.dataset.prioridade) - obterPesoPrioridade(b.elemento.dataset.prioridade);
+        return diferenca !== 0 ? diferenca : a.indice - b.indice;
+    });
+
+    tarefas.forEach(function (item) {
+        lista.appendChild(item.elemento);
+    });
+
+    if (!animar) {
+        return;
+    }
+
+    var duracao = 420;
+    var movimentos = [];
+
+    tarefas.forEach(function (item) {
+        var topoAtual = item.elemento.getBoundingClientRect().top;
+        var deslocamento = item.topoAnterior - topoAtual;
+
+        if (Math.abs(deslocamento) >= 1) {
+            movimentos.push({ elemento: item.elemento, deslocamento: deslocamento });
+        }
+    });
+
+    var destaqueMoveu = movimentos.some(function (movimento) {
+        return movimento.elemento === destaque;
+    });
+
+    if (destaque && destaqueMoveu) {
+        destaque.classList.add('reordering');
+        destaque._removerDestaque = window.setTimeout(function () {
+            destaque.classList.remove('reordering');
+            destaque._removerDestaque = null;
+        }, duracao + 60);
+    }
+
+    movimentos.forEach(function (movimento) {
+        var animacao = movimento.elemento.animate(
+            [
+                { transform: 'translateY(' + movimento.deslocamento + 'px)' },
+                { transform: 'translateY(0)' }
+            ],
+            {
+                duration: duracao,
+                easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+            }
+        );
+
+        animacoesReordenacao.set(movimento.elemento, animacao);
+    });
 }
 
 function salvarTarefa(tarefaTexto, id) {
@@ -223,6 +336,7 @@ function carregarTarefas() {
     tarefasSalvas.forEach(function (tarefa) {
         adicionarTarefaExistente(tarefa.texto, tarefa.concluida, tarefa.prioridade, tarefa.id);
     });
+    reordenarTarefas();
     atualizarContador();
 }
 

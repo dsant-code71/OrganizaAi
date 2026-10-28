@@ -293,6 +293,12 @@ li.task-item:hover {
     transform: translateY(-1px);
 }
 
+li.task-item.reordering {
+    position: relative;
+    z-index: 10;
+    box-shadow: var(--shadow-hover);
+}
+
 li.task-item[data-prioridade="alta"] {
     --priority: #e1306c;
 }
