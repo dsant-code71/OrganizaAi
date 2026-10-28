@@ -113,6 +113,7 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
     botaoRemover.className = 'remove-btn';
     botaoRemover.innerText = 'Remover';
     botaoRemover.setAttribute('aria-label', 'Remover tarefa');
+    botaoRemover.setAttribute('title', 'Remover tarefa');
 
     botaoRemover.addEventListener('click', function () {
         removerTarefa(id);
