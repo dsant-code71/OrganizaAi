@@ -3,35 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lista de Tarefas</title>
+    <title>OrganizaAi · Lista de Tarefas</title>
     <link rel="stylesheet" href="todolist.css" />
   </head>
   <body>
-    <div class="todo-container">
-      <h1>Lista de Tarefas</h1>
-        <div class="input-group">
-            <input type="text" id="tarefaInput" placeholder="Digite uma tarefa" />
-            <button id="addBtn" onclick="adicionarTarefa(), atualizarContador()">Adicionar</button>
-        </div>
-            <div id="count">
+    <header class="brand" aria-label="OrganizaAi">
+      <div class="avatar-ring"><span>OA</span></div>
+      <h1>OrganizaAi</h1>
+    </header>
 
-            </div>
-        
-          <div id="divFiltros">
+    <main class="todo-container" aria-label="Lista de tarefas">
+      <div class="modal-mark" aria-hidden="true">
+        <div class="avatar-ring"><span>OA</span></div>
+      </div>
 
-          </div>  
-    
-          <ul id="listaTarefas">
-              
-            </ul>
-            
-            <div id="divLimpar">
-    
+      <div class="input-group">
+        <input
+          type="text"
+          id="tarefaInput"
+          placeholder="No que você está trabalhando?"
+          aria-label="Nova tarefa"
+        />
+        <button id="addBtn" onclick="adicionarTarefa(), atualizarContador()">Adicionar</button>
+      </div>
 
-            </div>
-        
-  </div>
+      <div id="count" aria-live="polite"></div>
+      <div id="divFiltros"></div>
+      <ul id="listaTarefas"></ul>
+      <div id="divLimpar"></div>
+    </main>
 
-  <script src="todolist.js"></script>
+    <script src="todolist.js"></script>
   </body>
 </html>

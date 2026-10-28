@@ -1,15 +1,15 @@
-# Lista de Tarefas (domDavi)
+# Lista de Tarefas (OrganizaAi)
 
 **Documentação técnica e executiva**
 
 | Item | Valor |
 |---|---|
-| Projeto | domDavi — Lista de Tarefas |
+| Projeto | OrganizaAi — Lista de Tarefas |
 | Tipo | Aplicação web estática, single-page, sem build |
 | Stack | HTML5, CSS3, JavaScript (ES6+) |
 | Persistência | `localStorage` do navegador |
 | Dependências | Nenhuma |
-| Repositório | `github.com/dsant71/domDavi` |
+| Repositório | `github.com/dsant-code71/OrganizaAi` |
 | Documento gerado em | 28/10/2026 |
 | Revisão | 2 — correções P1 aplicadas em 28/10/2026 |
 | Base analisada | `todolist.js` da working tree (modificado em relação ao último commit) |
@@ -41,7 +41,7 @@
 
 ## 1. Sumário executivo
 
-O `domDavi` é uma aplicação de lista de tarefas (to-do list) construída em HTML, CSS e JavaScript puros, sem frameworks, sem dependências externas e sem etapa de compilação. O produto final é executado diretamente no navegador e persiste as tarefas no `localStorage`.
+O `OrganizaAi` é uma aplicação de lista de tarefas (to-do list) construída em HTML, CSS e JavaScript puros, sem frameworks, sem dependências externas e sem etapa de compilação. O produto final é executado diretamente no navegador e persiste as tarefas no `localStorage`.
 
 O projeto tem origem didática: os arquivos `tarefas.md` (20 exercícios de manipulação de DOM) e `ref js.md` (material de referência de JavaScript e DOM) definem o roteiro de evolução. O código implementa a maior parte desse roteiro, incluindo CRUD parcial, conclusão de tarefas, prioridades, filtros, contador, animações e persistência.
 
@@ -164,7 +164,7 @@ Exercitar manipulação de DOM sem frameworks, cobrindo:
 ## 4. Estrutura do repositório
 
 ```text
-domDavi/
+OrganizaAi/
 ├── index.html          # Estrutura da página e handlers inline
 ├── todolist.css        # Estilos visuais e layout
 ├── todolist.js         # Toda a lógica de estado, DOM e persistência
@@ -1053,6 +1053,6 @@ O repositório evoluiu de forma incremental, com commits que registram a impleme
 
 ## Conclusão
 
-O `domDavi` cumpre o papel de aplicação didática e de uso pessoal, com funcionalidades centrais operacionais e baixo custo de execução. As fragilidades críticas de robustez foram corrigidas: o erro de contador foi eliminado, as tarefas passaram a ter identidade única com migração automática e o storage é lido e escrito com tratamento de exceções.
+O `OrganizaAi` cumpre o papel de aplicação didática e de uso pessoal, com funcionalidades centrais operacionais e baixo custo de execução. As fragilidades críticas de robustez foram corrigidas: o erro de contador foi eliminado, as tarefas passaram a ter identidade única com migração automática e o storage é lido e escrito com tratamento de exceções.
 
 Os riscos remanescentes são de natureza funcional e visual: estilo de tarefas concluídas, ordenação e paleta de prioridade, além dos exercícios 6, 9, 16, 17 e 18. A execução do bloco P1 do roadmap conclui esses requisitos; a refatoração P2/P3 deve ser considerada se houver intenção de evoluir a aplicação para uso contínuo ou de adicionar novos recursos.

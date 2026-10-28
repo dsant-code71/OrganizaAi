@@ -1,5 +1,6 @@
 var STORAGE_KEY = 'tarefasSalvas';
 var PRIORIDADES_VALIDAS = ['nenhuma', 'alta', 'média', 'baixa'];
+var filtroAtual = 'todas';
 
 function gerarId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -59,8 +60,8 @@ function salvarTarefas(tarefas) {
 
 function atualizarContador() {
     var contador = document.querySelectorAll("#listaTarefas li").length;
-    console.log("Contador atualizado:", contador);
-    document.getElementById('count').innerText = 'Tarefas: ' + contador; }
+    document.getElementById('count').innerText = 'Tarefas: ' + contador;
+}
 
 document.addEventListener("DOMContentLoaded", function () {
     carregarTarefas();
@@ -69,19 +70,9 @@ document.addEventListener("DOMContentLoaded", function () {
     let tarefaInput = document.getElementById("tarefaInput");
 
     botaoAdicionar.disabled = true;
-    botaoAdicionar.style.backgroundColor = "gray";
-    botaoAdicionar.style.cursor = "not-allowed";
 
     tarefaInput.addEventListener("input", function () {
-        if (tarefaInput.value.trim() !== "") {
-            botaoAdicionar.disabled = false;
-            botaoAdicionar.style.backgroundColor = "#0f0f0f";
-            botaoAdicionar.style.cursor = "pointer";
-        } else {
-            botaoAdicionar.disabled = true;
-            botaoAdicionar.style.backgroundColor = "gray";
-            botaoAdicionar.style.cursor = "not-allowed";
-        }
+        botaoAdicionar.disabled = tarefaInput.value.trim() === "";
     });
 });
 
@@ -92,7 +83,9 @@ function adicionarTarefa() {
         var id = gerarId();
         adicionarTarefaExistente(tarefaTexto, false, "nenhuma", id);
         salvarTarefa(tarefaTexto, id);
-        document.getElementById('tarefaInput').value = ''; 
+        document.getElementById('tarefaInput').value = '';
+        document.getElementById('addBtn').disabled = true;
+        filtrarTarefas(filtroAtual);
     } else {
         alert('Por favor, insira uma tarefa.');
     }
@@ -103,48 +96,60 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
 
     var estaConcluida = concluida === true || concluida === 'true';
     var novaTarefa = document.createElement('li');
-    novaTarefa.innerText = tarefaTexto;
+    novaTarefa.className = estaConcluida ? 'task-item completed' : 'task-item';
     novaTarefa.style.opacity = "0";
     novaTarefa.dataset.id = id;
     novaTarefa.dataset.concluida = estaConcluida ? 'true' : 'false';
 
+    var textoTarefa = document.createElement('span');
+    textoTarefa.className = 'task-text';
+    textoTarefa.innerText = tarefaTexto;
+
     setTimeout(() => {
-        novaTarefa.style.transition = "opacity 1s"; 
         novaTarefa.style.opacity = "1";
     }, 1);
 
     var botaoRemover = document.createElement('button');
+    botaoRemover.className = 'remove-btn';
     botaoRemover.innerText = 'Remover';
+    botaoRemover.setAttribute('aria-label', 'Remover tarefa');
 
     botaoRemover.addEventListener('click', function () {
         removerTarefa(id);
-        novaTarefa.style.transition = "opacity 1s"; 
         novaTarefa.style.opacity = "0";
         setTimeout(() => {
             novaTarefa.remove();
-            atualizarContador()
-        }, 1000);
+            atualizarContador();
+        }, 350);
     });
 
     var botaoConcluir = document.createElement('button');
+    botaoConcluir.className = 'complete-btn';
     botaoConcluir.innerText = estaConcluida ? 'Concluída' : 'Concluir';
+    botaoConcluir.setAttribute('aria-label', estaConcluida ? 'Marcar como pendente' : 'Marcar como concluída');
+    botaoConcluir.setAttribute('title', estaConcluida ? 'Marcar como pendente' : 'Marcar como concluída');
 
     botaoConcluir.addEventListener('click', function () {
         if (novaTarefa.dataset.concluida === "true") {
-            botaoConcluir.style.backgroundColor = "#0f0f0f";
-            botaoConcluir.style.color = "#05cdff";
+            novaTarefa.classList.remove('completed');
             novaTarefa.dataset.concluida = "false";
             botaoConcluir.innerText = 'Concluir';
+            botaoConcluir.setAttribute('aria-label', 'Marcar como concluída');
+            botaoConcluir.setAttribute('title', 'Marcar como concluída');
         } else {
-            botaoConcluir.style.backgroundColor = "#05ff5d";
-            botaoConcluir.style.color = "black";
+            novaTarefa.classList.add('completed');
             novaTarefa.dataset.concluida = "true";
             botaoConcluir.innerText = 'Concluída';
+            botaoConcluir.setAttribute('aria-label', 'Marcar como pendente');
+            botaoConcluir.setAttribute('title', 'Marcar como pendente');
         }
         atualizarTarefa(id, novaTarefa.dataset.concluida, prioridade);
+        filtrarTarefas(filtroAtual);
     });
 
     var dropdownPrioridade = document.createElement('select');
+    dropdownPrioridade.className = 'priority-select';
+    dropdownPrioridade.setAttribute('aria-label', 'Prioridade da tarefa');
     var opcoes = ['Nenhuma', 'Alta', 'Média', 'Baixa'];
 
     opcoes.forEach(function (prioridadeOp) {
@@ -163,6 +168,7 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
         atualizarTarefa(id, novaTarefa.dataset.concluida, prioridade);
     });
 
+    novaTarefa.appendChild(textoTarefa);
     novaTarefa.appendChild(dropdownPrioridade);
     novaTarefa.appendChild(botaoRemover);
     novaTarefa.appendChild(botaoConcluir);
@@ -170,24 +176,7 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
 }
 
 function aplicarEstiloPrioridade(tarefa, prioridade) {
-    switch (prioridade) {
-        case 'nenhuma':
-            tarefa.style.backgroundColor = "black";
-            tarefa.style.color = "#05cdff";
-            break;
-        case 'alta':
-            tarefa.style.backgroundColor = "#f34040";
-            tarefa.style.color = "black";
-            break;
-        case 'média':
-            tarefa.style.backgroundColor = "#fca33d";
-            tarefa.style.color = "black";
-            break;
-        case 'baixa':
-            tarefa.style.backgroundColor = "#59fc61";
-            tarefa.style.color = "black";
-            break;
-    }
+    tarefa.dataset.prioridade = PRIORIDADES_VALIDAS.indexOf(prioridade) !== -1 ? prioridade : 'nenhuma';
 }
 
 function salvarTarefa(tarefaTexto, id) {
@@ -252,20 +241,21 @@ document.getElementById('tarefaInput').addEventListener('keypress', function (e)
     }
 });
 
-document.getElementById('divLimpar').innerHTML += '<button id="btnLimpar" onclick="limparTarefas();">Limpar</button>';
-document.getElementById('btnLimpar').style.width = "100%";
+document.getElementById('divLimpar').innerHTML += '<button id="btnLimpar" onclick="limparTarefas();">Limpar lista</button>';
 
 document.getElementById('divFiltros').innerHTML = `
-    <button id="btnTodas" onclick="filtrarTarefas('todas');">Todas</button>
-    <button id="btnConcluidas" onclick="filtrarTarefas('concluidas');">Concluídas</button>
-    <button id="btnNaoConcluidas" onclick="filtrarTarefas('naoConcluidas');">Não Concluídas</button>
+    <button id="btnTodas" class="filter-chip active" data-filtro="todas" onclick="filtrarTarefas('todas');">Todas</button>
+    <button id="btnConcluidas" class="filter-chip" data-filtro="concluidas" onclick="filtrarTarefas('concluidas');">Concluídas</button>
+    <button id="btnNaoConcluidas" class="filter-chip" data-filtro="naoConcluidas" onclick="filtrarTarefas('naoConcluidas');">Não Concluídas</button>
 `;
 
-document.getElementById('divFiltros').style.display = 'grid';
-document.getElementById('divFiltros').style.gridTemplateColumns = '34% 34% 35%';
-document.getElementById('divFiltros').style.alignItems = 'center';
-
 function filtrarTarefas(filtro) {
+    filtroAtual = filtro;
+
+    document.querySelectorAll('#divFiltros button').forEach(function (botao) {
+        botao.classList.toggle('active', botao.dataset.filtro === filtro);
+    });
+
     var tarefas = document.querySelectorAll("#listaTarefas li");
     tarefas.forEach(function (tarefa) {
         switch (filtro) {
