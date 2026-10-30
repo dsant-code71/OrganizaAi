@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar · OrganizaAi</title>
+    <link rel="stylesheet" href="shared/auth.css" />
+    <script src="shared/config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="shared/supabase.js"></script>
+    <script src="shared/auth.js"></script>
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <a class="auth-brand" href="index.html" aria-label="OrganizaAi">
+        <span class="auth-brand-mark">OA</span>
+        <h1>OrganizaAi</h1>
+      </a>
+
+      <section id="loginCard" class="auth-card" aria-labelledby="loginTitle">
+        <h2 id="loginTitle">Entrar</h2>
+        <p>Acesse com seu e-mail corporativo para continuar.</p>
+
+        <form id="loginForm" novalidate>
+          <label class="auth-field" for="loginEmail">
+            <span>E-mail</span>
+            <input
+              type="email"
+              id="loginEmail"
+              name="email"
+              autocomplete="username"
+              inputmode="email"
+              required
+            />
+          </label>
+
+          <label class="auth-field" for="loginPassword">
+            <span>Senha</span>
+            <input
+              type="password"
+              id="loginPassword"
+              name="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+
+          <label class="auth-password-row" for="showPassword">
+            <input type="checkbox" id="showPassword" />
+            Mostrar senha
+          </label>
+
+          <button type="submit" id="loginSubmit" class="auth-submit">Entrar</button>
+          <div id="loginMessage" class="auth-message" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section id="changeCard" class="auth-card" aria-labelledby="changeTitle" hidden>
+        <h2 id="changeTitle">Defina uma nova senha</h2>
+        <p>Sua senha foi redefinida pelo gestor. Escolha uma nova senha para continuar.</p>
+
+        <form id="changeForm" novalidate>
+          <label class="auth-field" for="newPassword">
+            <span>Nova senha</span>
+            <input
+              type="password"
+              id="newPassword"
+              name="newPassword"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <label class="auth-field" for="confirmPassword">
+            <span>Confirmar nova senha</span>
+            <input
+              type="password"
+              id="confirmPassword"
+              name="confirmPassword"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <button type="submit" id="changeSubmit" class="auth-submit">Salvar nova senha</button>
+          <div id="changeMessage" class="auth-message" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <p class="auth-footnote">
+        Acesso restrito. Solicite o cadastro ao gestor do sistema.
+      </p>
+    </main>
+
+    <script src="login.js"></script>
+  </body>
+</html>
