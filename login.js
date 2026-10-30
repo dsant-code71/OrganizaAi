@@ -43,14 +43,11 @@
 
       if (perfil) {
         if (perfil.must_change_password === true) {
-          loginCard.hidden = true;
-          changeCard.hidden = false;
-          newPassword.focus();
+          await Auth.logout();
+        } else {
+          window.location.replace(destino());
           return;
         }
-
-        window.location.replace(destino());
-        return;
       }
     } catch (erro) {
       console.warn('Não foi possível verificar a sessão.', erro);
