@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Usuários e acessos · OrganizaAi</title>
+    <link rel="stylesheet" href="shared/auth.css" />
+    <script src="shared/config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="shared/supabase.js"></script>
+    <script src="shared/auth.js"></script>
+    <script
+      src="shared/auth-guard.js"
+      data-perfis="gestor"
+      data-login="login.html"
+      data-fallback="index.html"
+    ></script>
+    <script src="shared/auth-ui.js" data-base="./"></script>
+  </head>
+  <body class="admin-page">
+    <a class="admin-brand" href="index.html" aria-label="Voltar para OrganizaAi">
+      <span class="auth-brand-mark">OA</span>
+      <strong>OrganizaAi</strong>
+    </a>
+
+    <div id="headerActions" class="header-actions"></div>
+
+    <main class="admin-container">
+      <div class="admin-heading">
+        <div>
+          <h1>Usuários e acessos</h1>
+          <p>Gerencie quem pode operar o sistema e qual perfil cada pessoa possui.</p>
+        </div>
+        <button type="button" id="newUserBtn" class="admin-btn primary">Novo usuário</button>
+      </div>
+
+      <section class="admin-card" aria-label="Lista de usuários">
+        <div class="admin-toolbar">
+          <label class="admin-search" for="userSearch">
+            <span class="sr-only">Buscar usuários</span>
+            <input
+              type="search"
+              id="userSearch"
+              placeholder="Buscar por nome, usuário, e-mail ou CPF"
+              autocomplete="off"
+            />
+          </label>
+        </div>
+
+        <div id="usersMessage" class="admin-message" role="status" aria-live="polite"></div>
+
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">Usuário</th>
+                <th scope="col">CPF</th>
+                <th scope="col">Perfil</th>
+                <th scope="col">Status</th>
+                <th scope="col">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="usersEmpty" class="admin-empty" hidden>Nenhum usuário encontrado.</div>
+      </section>
+
+      <div class="admin-section-title">
+        <h2>Auditoria recente</h2>
+      </div>
+
+      <section class="admin-card" aria-label="Auditoria recente">
+        <div id="auditList" class="audit-list"></div>
+        <div id="auditEmpty" class="admin-empty" hidden>Nenhum registro de auditoria.</div>
+      </section>
+    </main>
+
+    <dialog id="userDialog" class="auth-dialog" aria-labelledby="userDialogTitle">
+      <header class="auth-dialog-header">
+        <h2 id="userDialogTitle">Novo usuário</h2>
+        <button type="button" id="closeUserDialog" class="auth-dialog-close" aria-label="Fechar">×</button>
+      </header>
+
+      <form id="userForm" novalidate>
+        <div class="auth-dialog-body">
+          <input type="hidden" id="userId" />
+
+          <label class="auth-field" for="userName">
+            <span>Nome completo</span>
+            <input type="text" id="userName" autocomplete="name" required />
+          </label>
+
+          <div class="auth-grid-2">
+            <label class="auth-field" for="userUsername">
+              <span>Usuário de acesso</span>
+              <input type="text" id="userUsername" autocomplete="off" required />
+            </label>
+
+            <label class="auth-field" for="userCpf">
+              <span>CPF</span>
+              <input type="text" id="userCpf" inputmode="numeric" autocomplete="off" required />
+            </label>
+          </div>
+
+          <label class="auth-field" for="userEmail">
+            <span>E-mail corporativo</span>
+            <input type="email" id="userEmail" autocomplete="email" required />
+          </label>
+
+          <div class="auth-grid-2">
+            <label class="auth-field" for="userRole">
+              <span>Perfil</span>
+              <select id="userRole" class="auth-select">
+                <option value="operador">Operador</option>
+                <option value="gestor">Gestor</option>
+              </select>
+            </label>
+
+            <label class="auth-check" for="userActive">
+              <input type="checkbox" id="userActive" checked />
+              Usuário ativo
+            </label>
+          </div>
+
+          <label class="auth-field" id="userPasswordField" for="userPassword">
+            <span>Senha inicial</span>
+            <input
+              type="password"
+              id="userPassword"
+              autocomplete="new-password"
+              minlength="8"
+            />
+          </label>
+
+          <div id="userFormMessage" class="auth-message" role="status" aria-live="polite"></div>
+        </div>
+
+        <footer class="auth-dialog-footer">
+          <button type="button" id="cancelUserDialog" class="admin-btn secondary">Cancelar</button>
+          <button type="submit" id="saveUserBtn" class="admin-btn primary">Salvar</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="passwordDialog" class="auth-dialog" aria-labelledby="passwordDialogTitle">
+      <header class="auth-dialog-header">
+        <h2 id="passwordDialogTitle">Redefinir senha</h2>
+        <button type="button" id="closePasswordDialog" class="auth-dialog-close" aria-label="Fechar">×</button>
+      </header>
+
+      <form id="passwordForm" novalidate>
+        <div class="auth-dialog-body">
+          <p id="passwordTarget" class="auth-footnote"></p>
+
+          <label class="auth-field" for="resetPassword">
+            <span>Nova senha temporária</span>
+            <input
+              type="password"
+              id="resetPassword"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <label class="auth-field" for="resetPasswordConfirm">
+            <span>Confirmar senha</span>
+            <input
+              type="password"
+              id="resetPasswordConfirm"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <div id="passwordMessage" class="auth-message" role="status" aria-live="polite"></div>
+        </div>
+
+        <footer class="auth-dialog-footer">
+          <button type="button" id="cancelPasswordDialog" class="admin-btn secondary">Cancelar</button>
+          <button type="submit" id="savePasswordBtn" class="admin-btn primary">Redefinir</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="usuarios.js"></script>
+  </body>
+</html>
