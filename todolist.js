@@ -1,63 +1,58 @@
-var STORAGE_KEY = 'tarefasSalvas';
 var PRIORIDADES_VALIDAS = ['nenhuma', 'alta', 'média', 'baixa'];
 var PRIORIDADE_PESO = { alta: 0, 'média': 1, baixa: 2, nenhuma: 3 };
 var filtroAtual = 'todas';
 var animacoesReordenacao = new WeakMap();
+var tarefaInput;
+var botaoAdicionar;
 
 function gerarId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
         return window.crypto.randomUUID();
     }
-    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+
+    var bytes = new Uint8Array(16);
+
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+        window.crypto.getRandomValues(bytes);
+    } else {
+        for (var i = 0; i < bytes.length; i++) {
+            bytes[i] = Math.floor(Math.random() * 256);
+        }
+    }
+
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    var hex = Array.prototype.map.call(bytes, function (byte) {
+        return byte.toString(16).padStart(2, '0');
+    }).join('');
+
+    return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
 }
 
-function normalizarTarefa(tarefa) {
+function paraBancoPrioridade(prioridade) {
+    if (prioridade === 'média') {
+        return 'media';
+    }
+
+    return PRIORIDADES_VALIDAS.indexOf(prioridade) !== -1 ? prioridade : 'nenhuma';
+}
+
+function daBancoPrioridade(prioridade) {
+    if (prioridade === 'media') {
+        return 'média';
+    }
+
+    return PRIORIDADES_VALIDAS.indexOf(prioridade) !== -1 ? prioridade : 'nenhuma';
+}
+
+function mapearTarefa(registro) {
     return {
-        id: typeof tarefa.id === 'string' && tarefa.id !== '' ? tarefa.id : gerarId(),
-        texto: tarefa.texto,
-        concluida: tarefa.concluida === true || tarefa.concluida === 'true',
-        prioridade: PRIORIDADES_VALIDAS.indexOf(tarefa.prioridade) !== -1 ? tarefa.prioridade : 'nenhuma'
+        id: registro.id,
+        texto: registro.texto,
+        concluida: registro.concluida === true,
+        prioridade: daBancoPrioridade(registro.prioridade)
     };
-}
-
-function normalizarTarefas(tarefas) {
-    var idsUsados = {};
-
-    return tarefas.map(function (tarefa) {
-        var normalizada = normalizarTarefa(tarefa);
-
-        while (idsUsados[normalizada.id]) {
-            normalizada.id = gerarId();
-        }
-
-        idsUsados[normalizada.id] = true;
-        return normalizada;
-    });
-}
-
-function lerTarefas() {
-    try {
-        var tarefasSalvas = JSON.parse(localStorage.getItem(STORAGE_KEY));
-
-        if (!Array.isArray(tarefasSalvas)) {
-            return [];
-        }
-
-        return ordenarPorPrioridade(tarefasSalvas.filter(function (tarefa) {
-            return tarefa && typeof tarefa.texto === 'string' && tarefa.texto.trim() !== '';
-        }));
-    } catch (erro) {
-        console.warn('Não foi possível ler as tarefas salvas.', erro);
-        return [];
-    }
-}
-
-function salvarTarefas(tarefas) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(ordenarPorPrioridade(tarefas)));
-    } catch (erro) {
-        console.warn('Não foi possível salvar as tarefas.', erro);
-    }
 }
 
 function atualizarContador() {
@@ -65,33 +60,51 @@ function atualizarContador() {
     document.getElementById('count').innerText = 'Tarefas: ' + contador;
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-    carregarTarefas();
+async function salvarTarefa(tarefaTexto, id) {
+    var perfil = Auth.usuarioAtual();
 
-    let botaoAdicionar = document.getElementById("addBtn");
-    let tarefaInput = document.getElementById("tarefaInput");
-
-    botaoAdicionar.disabled = true;
-
-    tarefaInput.addEventListener("input", function () {
-        botaoAdicionar.disabled = tarefaInput.value.trim() === "";
-    });
-});
-
-function adicionarTarefa() {
-    var tarefaTexto = document.getElementById('tarefaInput').value;
-
-    if (tarefaTexto.trim() !== '') {
-        var id = gerarId();
-        adicionarTarefaExistente(tarefaTexto, false, "nenhuma", id);
-        salvarTarefa(tarefaTexto, id);
-        document.getElementById('tarefaInput').value = '';
-        document.getElementById('addBtn').disabled = true;
-        reordenarTarefas();
-        filtrarTarefas(filtroAtual);
-    } else {
-        alert('Por favor, insira uma tarefa.');
+    if (!perfil) {
+        return false;
     }
+
+    var resposta = await window.sb.from('tasks').insert({
+        id: id,
+        user_id: perfil.id,
+        texto: tarefaTexto,
+        concluida: false,
+        prioridade: 'nenhuma',
+        ordem: Math.floor(Date.now() / 1000)
+    });
+
+    if (resposta.error) {
+        console.warn('Não foi possível salvar a tarefa.', resposta.error);
+        return false;
+    }
+
+    return true;
+}
+
+async function adicionarTarefa() {
+    var tarefaTexto = tarefaInput.value.trim();
+
+    if (tarefaTexto === '') {
+        alert('Por favor, insira uma tarefa.');
+        return;
+    }
+
+    var id = gerarId();
+    var salvou = await salvarTarefa(tarefaTexto, id);
+
+    if (!salvou) {
+        alert('Não foi possível salvar a tarefa.');
+        return;
+    }
+
+    adicionarTarefaExistente(tarefaTexto, false, 'nenhuma', id);
+    tarefaInput.value = '';
+    botaoAdicionar.disabled = true;
+    reordenarTarefas();
+    filtrarTarefas(filtroAtual);
 }
 
 function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "nenhuma", id = null) {
@@ -114,6 +127,7 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
 
     var botaoRemover = document.createElement('button');
     botaoRemover.className = 'remove-btn';
+    botaoRemover.type = 'button';
     botaoRemover.innerText = 'Remover';
     botaoRemover.setAttribute('aria-label', 'Remover tarefa');
     botaoRemover.setAttribute('title', 'Remover tarefa');
@@ -129,6 +143,7 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
 
     var botaoConcluir = document.createElement('button');
     botaoConcluir.className = 'complete-btn';
+    botaoConcluir.type = 'button';
     botaoConcluir.innerText = estaConcluida ? 'Concluída' : 'Concluir';
     botaoConcluir.setAttribute('aria-label', estaConcluida ? 'Marcar como pendente' : 'Marcar como concluída');
     botaoConcluir.setAttribute('title', estaConcluida ? 'Marcar como pendente' : 'Marcar como concluída');
@@ -154,12 +169,17 @@ function adicionarTarefaExistente(tarefaTexto, concluida = false, prioridade = "
     var dropdownPrioridade = document.createElement('select');
     dropdownPrioridade.className = 'priority-select';
     dropdownPrioridade.setAttribute('aria-label', 'Prioridade da tarefa');
-    var opcoes = ['Nenhuma', 'Alta', 'Média', 'Baixa'];
+    var opcoes = [
+        { valor: 'nenhuma', rotulo: 'Nenhuma' },
+        { valor: 'alta', rotulo: 'Alta' },
+        { valor: 'média', rotulo: 'Média' },
+        { valor: 'baixa', rotulo: 'Baixa' }
+    ];
 
-    opcoes.forEach(function (prioridadeOp) {
+    opcoes.forEach(function (opcaoDados) {
         var opcao = document.createElement('option');
-        opcao.value = prioridadeOp.toLowerCase();
-        opcao.innerText = prioridadeOp;
+        opcao.value = opcaoDados.valor;
+        opcao.innerText = opcaoDados.rotulo;
         dropdownPrioridade.appendChild(opcao);
     });
 
@@ -293,76 +313,195 @@ function reordenarTarefas(opcoes) {
     });
 }
 
-function salvarTarefa(tarefaTexto, id) {
-    var tarefasSalvas = lerTarefas();
-    tarefasSalvas.push({ id: id || gerarId(), texto: tarefaTexto, concluida: false, prioridade: "nenhuma" });
-    salvarTarefas(tarefasSalvas);
-}
+async function atualizarTarefa(id, concluida, prioridade) {
+    var perfil = Auth.usuarioAtual();
 
-function atualizarTarefa(id, concluida, prioridade) {
+    if (!perfil) {
+        return;
+    }
+
     var estaConcluida = concluida === true || concluida === 'true';
-    var tarefasSalvas = lerTarefas();
-    tarefasSalvas = tarefasSalvas.map(function (tarefa) {
-        if (tarefa.id === id) {
-            return { id: tarefa.id, texto: tarefa.texto, concluida: estaConcluida, prioridade: prioridade };
-        }
-        return tarefa;
-    });
-    salvarTarefas(tarefasSalvas);
+    var resposta = await window.sb
+        .from('tasks')
+        .update({
+            concluida: estaConcluida,
+            prioridade: paraBancoPrioridade(prioridade)
+        })
+        .eq('id', id)
+        .eq('user_id', perfil.id);
+
+    if (resposta.error) {
+        console.warn('Não foi possível atualizar a tarefa.', resposta.error);
+    }
 }
 
-function removerTarefa(id) {
-    var tarefasSalvas = lerTarefas().filter(function (tarefa) {
-        return tarefa.id !== id;
-    });
-    salvarTarefas(tarefasSalvas);
+async function removerTarefa(id) {
+    var perfil = Auth.usuarioAtual();
+
+    if (!perfil) {
+        return;
+    }
+
+    var resposta = await window.sb
+        .from('tasks')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', perfil.id);
+
+    if (resposta.error) {
+        console.warn('Não foi possível remover a tarefa.', resposta.error);
+    }
+
     atualizarContador();
 }
 
-function carregarTarefas() {
-    var tarefasOriginais = lerTarefas();
-    var tarefasSalvas = normalizarTarefas(tarefasOriginais);
-    var precisaMigrar = tarefasSalvas.some(function (tarefa, indice) {
-        var original = tarefasOriginais[indice];
-        return tarefa.id !== original.id ||
-            tarefa.concluida !== original.concluida ||
-            tarefa.prioridade !== original.prioridade;
-    });
+async function migrarTarefasLocais() {
+    var perfil = Auth.usuarioAtual();
 
-    if (precisaMigrar) {
-        salvarTarefas(tarefasSalvas);
+    if (!perfil) {
+        return;
     }
 
-    tarefasSalvas.forEach(function (tarefa) {
+    var chave = 'organizaai.migrado.tarefas.' + perfil.id;
+
+    try {
+        if (localStorage.getItem(chave)) {
+            return;
+        }
+    } catch (erro) {
+        return;
+    }
+
+    var bruto = null;
+
+    try {
+        bruto = localStorage.getItem('tarefasSalvas');
+    } catch (erro) {
+        bruto = null;
+    }
+
+    if (!bruto) {
+        try {
+            localStorage.setItem(chave, '1');
+        } catch (erro) {
+            console.warn('Não foi possível marcar a migração.', erro);
+        }
+        return;
+    }
+
+    try {
+        var lista = JSON.parse(bruto);
+
+        if (Array.isArray(lista) && lista.length > 0) {
+            var registros = lista
+                .filter(function (tarefa) {
+                    return tarefa && typeof tarefa.texto === 'string' && tarefa.texto.trim() !== '';
+                })
+                .map(function (tarefa, indice) {
+                    return {
+                        id: gerarId(),
+                        user_id: perfil.id,
+                        texto: tarefa.texto,
+                        concluida: tarefa.concluida === true || tarefa.concluida === 'true',
+                        prioridade: paraBancoPrioridade(tarefa.prioridade),
+                        ordem: indice
+                    };
+                });
+
+            if (registros.length > 0) {
+                var resposta = await window.sb.from('tasks').insert(registros);
+
+                if (resposta.error) {
+                    throw resposta.error;
+                }
+            }
+        }
+
+        localStorage.setItem('tarefasSalvas.legacy', bruto);
+        localStorage.removeItem('tarefasSalvas');
+        localStorage.setItem(chave, '1');
+    } catch (erro) {
+        console.warn('Não foi possível migrar as tarefas locais.', erro);
+    }
+}
+
+async function carregarTarefas() {
+    await migrarTarefasLocais();
+
+    var resposta = await window.sb
+        .from('tasks')
+        .select('*')
+        .order('ordem', { ascending: true })
+        .order('created_at', { ascending: true });
+
+    if (resposta.error) {
+        console.warn('Não foi possível carregar as tarefas.', resposta.error);
+        return;
+    }
+
+    var tarefas = ordenarPorPrioridade((resposta.data || []).map(mapearTarefa));
+    document.getElementById('listaTarefas').replaceChildren();
+
+    tarefas.forEach(function (tarefa) {
         adicionarTarefaExistente(tarefa.texto, tarefa.concluida, tarefa.prioridade, tarefa.id);
     });
+
     reordenarTarefas();
     atualizarContador();
 }
 
-function limparTarefas() {
-    document.getElementById('listaTarefas').innerHTML = '';
-    try {
-        localStorage.removeItem(STORAGE_KEY);
-    } catch (erro) {
-        console.warn('Não foi possível limpar as tarefas salvas.', erro);
+async function limparTarefas() {
+    var perfil = Auth.usuarioAtual();
+
+    if (!perfil) {
+        return;
     }
-    atualizarContador()
+
+    var resposta = await window.sb
+        .from('tasks')
+        .delete()
+        .eq('user_id', perfil.id);
+
+    if (resposta.error) {
+        console.warn('Não foi possível limpar as tarefas.', resposta.error);
+        return;
+    }
+
+    document.getElementById('listaTarefas').replaceChildren();
+    atualizarContador();
 }
 
-document.getElementById('tarefaInput').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        adicionarTarefa(document.getElementById('tarefaInput').value);
-    }
-});
+function montarAcoes() {
+    var divLimpar = document.getElementById('divLimpar');
+    var btnLimpar = document.createElement('button');
+    btnLimpar.id = 'btnLimpar';
+    btnLimpar.type = 'button';
+    btnLimpar.textContent = 'Limpar lista';
+    btnLimpar.addEventListener('click', limparTarefas);
+    divLimpar.replaceChildren(btnLimpar);
 
-document.getElementById('divLimpar').innerHTML += '<button id="btnLimpar" onclick="limparTarefas();">Limpar lista</button>';
+    var divFiltros = document.getElementById('divFiltros');
+    var filtros = [
+        { id: 'btnTodas', rotulo: 'Todas', valor: 'todas', ativo: true },
+        { id: 'btnConcluidas', rotulo: 'Concluídas', valor: 'concluidas', ativo: false },
+        { id: 'btnNaoConcluidas', rotulo: 'Não Concluídas', valor: 'naoConcluidas', ativo: false }
+    ];
 
-document.getElementById('divFiltros').innerHTML = `
-    <button id="btnTodas" class="filter-chip active" data-filtro="todas" onclick="filtrarTarefas('todas');">Todas</button>
-    <button id="btnConcluidas" class="filter-chip" data-filtro="concluidas" onclick="filtrarTarefas('concluidas');">Concluídas</button>
-    <button id="btnNaoConcluidas" class="filter-chip" data-filtro="naoConcluidas" onclick="filtrarTarefas('naoConcluidas');">Não Concluídas</button>
-`;
+    divFiltros.replaceChildren();
+
+    filtros.forEach(function (dados) {
+        var botao = document.createElement('button');
+        botao.id = dados.id;
+        botao.type = 'button';
+        botao.className = 'filter-chip' + (dados.ativo ? ' active' : '');
+        botao.dataset.filtro = dados.valor;
+        botao.textContent = dados.rotulo;
+        botao.addEventListener('click', function () {
+            filtrarTarefas(dados.valor);
+        });
+        divFiltros.appendChild(botao);
+    });
+}
 
 function filtrarTarefas(filtro) {
     filtroAtual = filtro;
@@ -395,3 +534,37 @@ function filtrarTarefas(filtro) {
     });
 }
 
+function iniciarTarefas() {
+    tarefaInput = document.getElementById('tarefaInput');
+    botaoAdicionar = document.getElementById('addBtn');
+
+    botaoAdicionar.disabled = true;
+
+    tarefaInput.addEventListener('input', function () {
+        botaoAdicionar.disabled = tarefaInput.value.trim() === "";
+    });
+
+    tarefaInput.addEventListener('keypress', function (evento) {
+        if (evento.key === 'Enter') {
+            evento.preventDefault();
+            adicionarTarefa();
+        }
+    });
+
+    botaoAdicionar.addEventListener('click', adicionarTarefa);
+    montarAcoes();
+    carregarTarefas();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var pronto = window.AUTH_READY || Auth.proteger({
+        login: 'login.html',
+        fallback: 'index.html'
+    });
+
+    pronto.then(function (perfil) {
+        if (perfil) {
+            iniciarTarefas();
+        }
+    });
+});
