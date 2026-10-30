@@ -1254,6 +1254,17 @@ input[aria-invalid="true"] {
     }
 }
 
+body .header-actions {
+    top: 84px;
+}
+
+@media (max-width: 720px) {
+    body .header-actions {
+        top: 72px;
+        right: 12px;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

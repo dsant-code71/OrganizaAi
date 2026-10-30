@@ -2,6 +2,17 @@ html.auth-pending body {
   visibility: hidden;
 }
 
+.auth-page,
+.auth-page *,
+.auth-page *::before,
+.auth-page *::after,
+.admin-page,
+.admin-page *,
+.admin-page *::before,
+.admin-page *::after {
+  box-sizing: border-box;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -598,13 +609,24 @@ html.auth-pending body {
 }
 
 .auth-dialog {
+  display: flex;
+  flex-direction: column;
   width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   padding: 0;
+  overflow: hidden;
   border: 1px solid var(--auth-border-soft);
   border-radius: 20px;
   background: var(--auth-surface);
   color: var(--auth-text);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+}
+
+.auth-dialog > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .auth-dialog::backdrop {
@@ -638,14 +660,21 @@ html.auth-pending body {
 }
 
 .auth-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .auth-dialog-footer {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 20px 20px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--auth-border-soft);
+  background: var(--auth-surface);
 }
 
 .auth-grid-2 {
@@ -697,7 +726,8 @@ html.auth-pending body {
   }
 
   .admin-page {
-    padding-top: 24px;
+    padding-top: 92px;
+    padding-bottom: 104px;
   }
 
   .admin-heading {
