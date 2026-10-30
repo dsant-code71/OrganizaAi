@@ -28,6 +28,7 @@ var userForm;
 var userName;
 var userEmail;
 var userRole;
+var userCpf;
 var userFormHint;
 var userFormMessage;
 var saveUserBtn;
@@ -198,7 +199,7 @@ async function invocarAdmin(payload) {
 async function carregarUsuarios() {
     var resposta = await cliente
         .from('profiles')
-        .select('id, nome_completo, username, email, role, ativo, must_change_password, created_at, last_login_at')
+        .select('id, nome_completo, username, email, cpf, role, ativo, must_change_password, created_at, last_login_at')
         .order('nome_completo', { ascending: true });
 
     if (resposta.error) {
@@ -355,6 +356,7 @@ function abrirDialogo(usuario) {
     saveUserBtn.textContent = usuario ? 'Salvar alterações' : 'Criar usuário';
     userName.value = usuario ? (usuario.nome_completo || '') : '';
     userEmail.value = usuario ? (usuario.email || '') : '';
+    userCpf.value = usuario ? mascaraCpf(usuario.cpf || '') : '';
     userRole.value = usuario ? usuario.role : 'operador';
     userRole.disabled = eu;
     userFormMessage.textContent = '';
@@ -392,11 +394,36 @@ function mensagemFormulario(texto, tipo) {
     userFormMessage.className = 'form-message' + (tipo ? ' ' + tipo : '');
 }
 
+function mascaraCpf(valor) {
+    var digitos = valor.replace(/\D/g, '').slice(0, 11);
+    if (digitos.length <= 3) return digitos;
+    if (digitos.length <= 6) return digitos.slice(0, 3) + '.' + digitos.slice(3);
+    if (digitos.length <= 9) return digitos.slice(0, 3) + '.' + digitos.slice(3, 6) + '.' + digitos.slice(6);
+    return digitos.slice(0, 3) + '.' + digitos.slice(3, 6) + '.' + digitos.slice(6, 9) + '-' + digitos.slice(9);
+}
+
+function cpfValido(cpf) {
+    var digitos = cpf.replace(/\D/g, '');
+    if (digitos.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(digitos)) return false;
+    var soma = 0;
+    for (var i = 0; i < 9; i++) soma += parseInt(digitos[i]) * (10 - i);
+    var resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    if (resto !== parseInt(digitos[9])) return false;
+    soma = 0;
+    for (var j = 0; j < 10; j++) soma += parseInt(digitos[j]) * (11 - j);
+    resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    return resto === parseInt(digitos[10]);
+}
+
 async function salvarUsuario(evento) {
     evento.preventDefault();
 
     var nome = userName.value.trim();
     var email = userEmail.value.trim().toLowerCase();
+    var cpf = userCpf.value.replace(/\D/g, '');
     var role = userRole.value;
 
     if (nome === '') {
@@ -408,6 +435,12 @@ async function salvarUsuario(evento) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         mensagemFormulario('Informe um email válido.', 'error');
         userEmail.focus();
+        return;
+    }
+
+    if (!cpfValido(cpf)) {
+        mensagemFormulario('Informe um CPF válido.', 'error');
+        userCpf.focus();
         return;
     }
 
@@ -436,6 +469,7 @@ async function salvarUsuario(evento) {
             id: editandoId,
             nome_completo: nome,
             email: email,
+            cpf: cpf,
             role: eu && usuario ? usuario.role : role
         };
     } else {
@@ -444,6 +478,7 @@ async function salvarUsuario(evento) {
             nome_completo: nome,
             username: gerarUsernameUnico(email, nome),
             email: email,
+            cpf: cpf,
             password: SENHA_PADRAO,
             role: role
         };
@@ -572,6 +607,7 @@ function atribuirElementos() {
     userForm = document.getElementById('userForm');
     userName = document.getElementById('userName');
     userEmail = document.getElementById('userEmail');
+    userCpf = document.getElementById('userCpf');
     userRole = document.getElementById('userRole');
     userFormHint = document.getElementById('userFormHint');
     userFormMessage = document.getElementById('userFormMessage');
@@ -613,6 +649,11 @@ function ligarEventos() {
     });
 
     userEmail.addEventListener('input', function () {
+        mensagemFormulario('', '');
+    });
+
+    userCpf.addEventListener('input', function () {
+        userCpf.value = mascaraCpf(userCpf.value);
         mensagemFormulario('', '');
     });
 
