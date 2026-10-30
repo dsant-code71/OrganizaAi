@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChecklistAi · Checklist diário de máquinas</title>
-    <link rel="stylesheet" href="checklist.css" />
+    <link rel="stylesheet" href="../assets/css/checklist.css" />
+    <link rel="stylesheet" href="../assets/css/auth.css" />
   </head>
   <body>
-    <header class="brand" aria-label="ChecklistAi">
+    <div id="authLoading" class="auth-loading" role="status" aria-live="polite">Carregando...</div>
+
+    <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
+
+    <header class="brand" aria-label="ChecklistAi" hidden>
       <a
         class="brand-link"
         href="../index.html"
@@ -27,6 +32,7 @@
       aria-haspopup="dialog"
       aria-controls="machinesMenu"
       aria-expanded="false"
+      hidden
     >
       <span class="menu-icon" aria-hidden="true">
         <span></span>
@@ -36,7 +42,7 @@
       <span id="menuBadge" class="menu-badge" aria-hidden="true" hidden>0</span>
     </button>
 
-    <main class="app-container" aria-label="Checklist diário de máquinas">
+    <main class="app-container" aria-label="Checklist diário de máquinas" hidden>
       <div class="page-heading">
         <div>
           <span class="eyebrow">Uso diário</span>
@@ -257,6 +263,9 @@
       </div>
     </dialog>
 
-    <script src="checklist.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-config.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/checklist.js"></script>
   </body>
 </html>

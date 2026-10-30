@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Usuários · OrganizaAi</title>
+    <link rel="stylesheet" href="assets/css/auth.css" />
+  </head>
+  <body class="admin-body">
+    <div id="authLoading" class="auth-loading" role="status" aria-live="polite">Carregando...</div>
+
+    <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
+
+    <header class="brand" aria-label="OrganizaAi" hidden>
+      <a
+        class="brand-link"
+        href="index.html"
+        title="Ir para a lista de tarefas"
+        aria-label="OrganizaAi — ir para a lista de tarefas"
+      >
+        <div class="avatar-ring"><span>OA</span></div>
+        <h1>OrganizaAi</h1>
+      </a>
+    </header>
+
+    <main class="admin-container" aria-label="Gestão de usuários" hidden>
+      <div class="admin-header">
+        <div>
+          <h2>Usuários</h2>
+          <p>Cadastre operadores e gestores, redefina senhas e controle o acesso ao sistema.</p>
+        </div>
+        <div class="admin-actions">
+          <button type="button" id="newUserBtn" class="btn-primary">Novo usuário</button>
+        </div>
+      </div>
+
+      <div id="adminNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <div class="admin-toolbar">
+        <label class="admin-search" for="userSearch">
+          <span class="sr-only">Buscar usuário</span>
+          <input
+            type="search"
+            id="userSearch"
+            placeholder="Buscar por nome, email ou usuário"
+            autocomplete="off"
+          />
+        </label>
+        <span id="userCount" class="admin-count" aria-live="polite"></span>
+      </div>
+
+      <div id="adminStatus" class="form-message" role="status" aria-live="polite"></div>
+
+      <div id="usersList" class="admin-list" aria-live="polite"></div>
+
+      <div id="usersEmpty" class="empty-state" hidden>Nenhum usuário encontrado.</div>
+
+      <p class="admin-back">
+        <a href="index.html">← Voltar para as tarefas</a>
+      </p>
+    </main>
+
+    <dialog id="userDialog" class="admin-dialog" aria-labelledby="userDialogTitle">
+      <div class="dialog-header">
+        <h3 id="userDialogTitle">Novo usuário</h3>
+        <button type="button" id="closeUserDialog" class="btn-ghost">Fechar</button>
+      </div>
+
+      <form id="userForm" novalidate>
+        <div class="field">
+          <label for="userName">Nome completo</label>
+          <input
+            type="text"
+            id="userName"
+            name="nome_completo"
+            maxlength="120"
+            autocomplete="name"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="userEmail">Email</label>
+          <input
+            type="email"
+            id="userEmail"
+            name="email"
+            autocomplete="email"
+            inputmode="email"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="userRole">Nível de acesso</label>
+          <select id="userRole" name="role">
+            <option value="operador">Operador</option>
+            <option value="gestor">Gestor</option>
+          </select>
+        </div>
+
+        <div id="userFormHint" class="notice admin-hint"></div>
+        <div id="userFormMessage" class="form-message" role="status" aria-live="polite"></div>
+
+        <div class="dialog-actions">
+          <button type="button" id="cancelUserBtn" class="btn-ghost">Cancelar</button>
+          <button type="submit" id="saveUserBtn" class="btn-primary">Criar usuário</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabase-config.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/usuarios.js"></script>
+  </body>
+</html>

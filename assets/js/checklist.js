@@ -1,12 +1,22 @@
-var STORAGE_MAQUINAS = 'maquinasChecklist';
-var STORAGE_DIAS = 'diasChecklist';
+'use strict';
+
+var cliente = null;
+var usuarioAtual = null;
+var perfilAtual = null;
+var ehGestor = false;
+var nomesMapa = {};
 
 var maquinas = [];
+var maquinasPorId = new Map();
 var dias = {};
 var dataSelecionada = '';
 var faseAtiva = 'inicio';
 var maquinaEmEdicaoId = null;
-var salvarTimer = null;
+
+var salvarTimers = new Map();
+var salvarFilas = new Map();
+var salvarErros = new Set();
+var camposPendentes = new Map();
 var mensagemMaquinaTimer = null;
 var mensagemExportTimer = null;
 
@@ -23,6 +33,7 @@ var machineFormMessage;
 var manageCount;
 var machinesEmpty;
 var machinesList;
+var openMachinesBtn;
 
 var dateLabel;
 var datePicker;
@@ -33,7 +44,6 @@ var openExportBtn;
 var saveStatus;
 
 var setupEmpty;
-var openMachinesBtn;
 var dayEmpty;
 var dayEmptyText;
 var createDayBtn;
@@ -63,13 +73,6 @@ var exportMessage;
 
 function pad2(valor) {
     return String(valor).padStart(2, '0');
-}
-
-function gerarId() {
-    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-        return window.crypto.randomUUID();
-    }
-    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
 function dataParaISO(data) {
@@ -117,229 +120,499 @@ function formatarDataLonga(iso) {
     return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-function formatarHora(timestamp) {
+function normalizarTimestamp(valor) {
+    if (typeof valor === 'number' && isFinite(valor)) {
+        return valor;
+    }
+
+    if (typeof valor === 'string' && valor !== '') {
+        var timestamp = Date.parse(valor);
+        return isNaN(timestamp) ? null : timestamp;
+    }
+
+    return null;
+}
+
+function formatarHora(valor) {
+    var timestamp = normalizarTimestamp(valor);
+
+    if (!timestamp) {
+        return '';
+    }
+
     var data = new Date(timestamp);
     return pad2(data.getHours()) + ':' + pad2(data.getMinutes());
 }
 
+function formatarDataHora(valor) {
+    var timestamp = normalizarTimestamp(valor);
+
+    if (!timestamp) {
+        return '';
+    }
+
+    var data = new Date(timestamp);
+    return pad2(data.getDate()) + '/' + pad2(data.getMonth() + 1) + '/' + data.getFullYear() +
+        ' ' + pad2(data.getHours()) + ':' + pad2(data.getMinutes());
+}
+
 function compararCodigos(a, b) {
-    return a.codigo.localeCompare(b.codigo, 'pt-BR', {
+    return String(a.codigo || '').localeCompare(String(b.codigo || ''), 'pt-BR', {
         numeric: true,
         sensitivity: 'base'
     });
 }
 
-function normalizarTimestamp(valor) {
-    return typeof valor === 'number' && isFinite(valor) ? valor : null;
+function nomePorId(id) {
+    var perfil = id ? nomesMapa[id] : null;
+
+    if (!perfil) {
+        return '';
+    }
+
+    return perfil.nome_completo || perfil.username || '';
 }
 
-function normalizarMaquina(bruto, idsUsados) {
+function descreverAutoria(entrada, fase) {
+    var marcado = fase === 'inicio' ? entrada.inicio : entrada.fim;
+
+    if (!marcado) {
+        return '';
+    }
+
+    var nome = nomePorId(fase === 'inicio' ? entrada.inicioPor : entrada.fimPor);
+    var hora = formatarHora(fase === 'inicio' ? entrada.inicioEm : entrada.fimEm);
+    var partes = [];
+
+    if (nome) {
+        partes.push(nome);
+    }
+
+    if (hora) {
+        partes.push(hora);
+    }
+
+    return partes.join(' · ');
+}
+
+function normalizarMaquina(bruto) {
     if (!bruto || typeof bruto !== 'object') {
         return null;
     }
 
     var codigo = typeof bruto.codigo === 'string' ? bruto.codigo.trim() : '';
 
-    if (codigo === '') {
+    if (codigo === '' || !bruto.id) {
         return null;
     }
 
-    var id = typeof bruto.id === 'string' && bruto.id !== '' ? bruto.id : gerarId();
-
-    while (idsUsados.has(id)) {
-        id = gerarId();
-    }
-
-    idsUsados.add(id);
-
     return {
-        id: id,
+        id: bruto.id,
         codigo: codigo,
-        criadoEm: normalizarTimestamp(bruto.criadoEm) || Date.now()
+        ativo: bruto.ativo !== false,
+        criadoEm: normalizarTimestamp(bruto.created_at) || Date.now()
     };
 }
 
-function normalizarMaquinaDoDia(bruto, idsUsados) {
-    if (!bruto || typeof bruto !== 'object') {
-        return null;
-    }
+function indexarMaquinas() {
+    maquinasPorId = new Map();
 
-    var codigo = typeof bruto.codigo === 'string' ? bruto.codigo.trim() : '';
-
-    if (codigo === '') {
-        return null;
-    }
-
-    var id = typeof bruto.id === 'string' && bruto.id !== '' ? bruto.id : gerarId();
-
-    while (idsUsados.has(id)) {
-        id = gerarId();
-    }
-
-    idsUsados.add(id);
-
-    return {
-        id: id,
-        codigo: codigo,
-        inicio: bruto.inicio === true,
-        fim: bruto.fim === true,
-        local: typeof bruto.local === 'string' ? bruto.local.trim() : '',
-        observacao: typeof bruto.observacao === 'string' ? bruto.observacao.trim() : '',
-        inicioEm: normalizarTimestamp(bruto.inicioEm),
-        fimEm: normalizarTimestamp(bruto.fimEm)
-    };
-}
-
-function normalizarDia(bruto, dataISO) {
-    if (!bruto || typeof bruto !== 'object' || !Array.isArray(bruto.maquinas)) {
-        return null;
-    }
-
-    var idsUsados = new Set();
-    var lista = [];
-
-    bruto.maquinas.forEach(function (item) {
-        var maquina = normalizarMaquinaDoDia(item, idsUsados);
-
-        if (maquina) {
-            lista.push(maquina);
-        }
+    maquinas.forEach(function (maquina) {
+        maquinasPorId.set(maquina.id, maquina);
     });
+}
 
-    if (lista.length === 0) {
-        return null;
-    }
+function maquinasAtivas() {
+    return maquinas.filter(function (maquina) {
+        return maquina.ativo === true;
+    });
+}
 
+function criarEntradaLocal(maquina) {
+    return {
+        id: maquina.id,
+        codigo: maquina.codigo,
+        inicio: false,
+        fim: false,
+        local: '',
+        observacao: '',
+        inicioEm: null,
+        inicioPor: null,
+        fimEm: null,
+        fimPor: null
+    };
+}
+
+function criarDiaLocal(dataISO, ativas) {
+    var lista = (ativas || maquinasAtivas()).map(criarEntradaLocal);
     lista.sort(compararCodigos);
 
     return {
         data: dataISO,
-        criadoEm: normalizarTimestamp(bruto.criadoEm) || Date.now(),
-        atualizadoEm: normalizarTimestamp(bruto.atualizadoEm) || Date.now(),
+        criadoEm: Date.now(),
+        atualizadoEm: Date.now(),
         maquinas: lista
     };
 }
 
-function lerMaquinas() {
-    try {
-        var salvos = JSON.parse(localStorage.getItem(STORAGE_MAQUINAS) || '[]');
+async function buscarPaginado(tabela, colunas, colunaOrdem) {
+    var acumulado = [];
+    var inicio = 0;
+    var passo = 1000;
 
-        if (!Array.isArray(salvos)) {
-            return [];
+    while (true) {
+        var resposta = await cliente
+            .from(tabela)
+            .select(colunas)
+            .order(colunaOrdem, { ascending: true })
+            .range(inicio, inicio + passo - 1);
+
+        if (resposta.error) {
+            throw resposta.error;
         }
 
-        var idsUsados = new Set();
-        var codigosUsados = new Set();
-        var lista = [];
+        var dados = resposta.data || [];
+        acumulado = acumulado.concat(dados);
 
-        salvos.forEach(function (bruto) {
-            var maquina = normalizarMaquina(bruto, idsUsados);
-
-            if (!maquina) {
-                return;
-            }
-
-            var chave = maquina.codigo.toLowerCase();
-
-            if (codigosUsados.has(chave)) {
-                return;
-            }
-
-            codigosUsados.add(chave);
-            lista.push(maquina);
-        });
-
-        lista.sort(compararCodigos);
-        return lista;
-    } catch (erro) {
-        console.warn('Não foi possível ler as máquinas cadastradas.', erro);
-        return [];
-    }
-}
-
-function lerDias() {
-    try {
-        var bruto = JSON.parse(localStorage.getItem(STORAGE_DIAS) || '{}');
-
-        if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) {
-            return {};
+        if (dados.length < passo) {
+            break;
         }
 
-        var resultado = {};
+        inicio += passo;
+    }
 
-        Object.keys(bruto).forEach(function (dataISO) {
-            if (!dataValidaISO(dataISO)) {
-                return;
-            }
+    return acumulado;
+}
 
-            var dia = normalizarDia(bruto[dataISO], dataISO);
+async function carregarMaquinas() {
+    var dados = await buscarPaginado('machines', 'id, codigo, ativo, created_at', 'id');
 
-            if (dia) {
-                resultado[dataISO] = dia;
-            }
+    maquinas = dados.map(normalizarMaquina).filter(Boolean);
+    maquinas.sort(compararCodigos);
+    indexarMaquinas();
+}
+
+async function carregarDias() {
+    var diasBrutos = await buscarPaginado('checklist_days', 'dia, created_at', 'dia');
+    var entradasBrutas = await buscarPaginado(
+        'checklist_entries',
+        'id, dia, machine_id, inicio, fim, local, observacao, inicio_em, inicio_por, fim_em, fim_por, updated_at',
+        'id'
+    );
+
+    dias = {};
+
+    diasBrutos.forEach(function (bruto) {
+        if (!dataValidaISO(bruto.dia)) {
+            return;
+        }
+
+        dias[bruto.dia] = {
+            data: bruto.dia,
+            criadoEm: normalizarTimestamp(bruto.created_at) || Date.now(),
+            atualizadoEm: normalizarTimestamp(bruto.created_at) || Date.now(),
+            maquinas: []
+        };
+    });
+
+    entradasBrutas.forEach(function (bruto) {
+        var dia = dias[bruto.dia];
+
+        if (!dia || !bruto.machine_id) {
+            return;
+        }
+
+        var maquina = maquinasPorId.get(bruto.machine_id);
+
+        dia.maquinas.push({
+            id: bruto.machine_id,
+            codigo: maquina ? maquina.codigo : 'Máquina removida',
+            inicio: bruto.inicio === true,
+            fim: bruto.fim === true,
+            local: typeof bruto.local === 'string' ? bruto.local : '',
+            observacao: typeof bruto.observacao === 'string' ? bruto.observacao : '',
+            inicioEm: normalizarTimestamp(bruto.inicio_em),
+            inicioPor: bruto.inicio_por || null,
+            fimEm: normalizarTimestamp(bruto.fim_em),
+            fimPor: bruto.fim_por || null
         });
+    });
 
-        return resultado;
-    } catch (erro) {
-        console.warn('Não foi possível ler os checklists salvos.', erro);
-        return {};
+    Object.keys(dias).forEach(function (dataISO) {
+        dias[dataISO].maquinas.sort(compararCodigos);
+    });
+}
+
+async function inserirEntradas(dataISO, ativas) {
+    if (!ativas || ativas.length === 0) {
+        return;
+    }
+
+    var linhas = ativas.map(function (maquina) {
+        return {
+            dia: dataISO,
+            machine_id: maquina.id
+        };
+    });
+
+    var resposta = await cliente
+        .from('checklist_entries')
+        .upsert(linhas, { onConflict: 'dia,machine_id', ignoreDuplicates: true });
+
+    if (resposta.error) {
+        throw resposta.error;
     }
 }
 
-function salvarMaquinas() {
-    try {
-        localStorage.setItem(STORAGE_MAQUINAS, JSON.stringify(maquinas));
-        return true;
-    } catch (erro) {
-        console.warn('Não foi possível salvar as máquinas.', erro);
-        return false;
+async function criarDiaNoBanco(dataISO, ativas) {
+    var resposta = await cliente
+        .from('checklist_days')
+        .upsert(
+            { dia: dataISO, created_by: usuarioAtual.id },
+            { onConflict: 'dia', ignoreDuplicates: true }
+        );
+
+    if (resposta.error) {
+        throw resposta.error;
     }
+
+    await inserirEntradas(dataISO, ativas);
 }
 
-function salvarDias() {
-    try {
-        localStorage.setItem(STORAGE_DIAS, JSON.stringify(dias));
-        return true;
-    } catch (erro) {
-        console.warn('Não foi possível salvar os checklists.', erro);
+async function sincronizarDiaHoje() {
+    var hoje = hojeISO();
+    var ativas = maquinasAtivas();
+
+    if (ativas.length === 0) {
         return false;
     }
+
+    var dia = dias[hoje];
+
+    if (!dia) {
+        await criarDiaNoBanco(hoje, ativas);
+        dias[hoje] = criarDiaLocal(hoje, ativas);
+        return true;
+    }
+
+    var existentes = new Set(dia.maquinas.map(function (entrada) {
+        return entrada.id;
+    }));
+
+    var faltantes = ativas.filter(function (maquina) {
+        return !existentes.has(maquina.id);
+    });
+
+    if (faltantes.length > 0) {
+        await inserirEntradas(hoje, faltantes);
+        faltantes.forEach(function (maquina) {
+            dia.maquinas.push(criarEntradaLocal(maquina));
+        });
+    }
+
+    var alterou = faltantes.length > 0;
+
+    dia.maquinas.forEach(function (entrada) {
+        var maquina = maquinasPorId.get(entrada.id);
+
+        if (maquina && entrada.codigo !== maquina.codigo) {
+            entrada.codigo = maquina.codigo;
+            alterou = true;
+        }
+    });
+
+    if (alterou) {
+        dia.maquinas.sort(compararCodigos);
+        dia.atualizadoEm = Date.now();
+    }
+
+    return alterou;
 }
 
 function definirStatusSalvamento(texto, tipo) {
+    if (!saveStatus) {
+        return;
+    }
+
     saveStatus.textContent = texto;
     saveStatus.className = 'save-status' + (tipo ? ' ' + tipo : '');
 }
 
-function agendarSalvamento() {
-    definirStatusSalvamento('Salvando...', 'salvando');
-
-    if (salvarTimer) {
-        window.clearTimeout(salvarTimer);
-        salvarTimer = null;
-    }
-
-    salvarTimer = window.setTimeout(function () {
-        salvarTimer = null;
-        salvarDiasAgora();
-    }, 250);
+function chaveEntrada(diaISO, machineId) {
+    return diaISO + '|' + machineId;
 }
 
-function salvarDiasAgora() {
-    if (salvarTimer) {
-        window.clearTimeout(salvarTimer);
-        salvarTimer = null;
+function atualizarStatusGlobal() {
+    if (salvarTimers.size > 0 || salvarFilas.size > 0) {
+        return;
     }
 
-    var salvou = salvarDias();
-
-    if (salvou) {
-        definirStatusSalvamento('Salvo às ' + formatarHora(Date.now()), 'salvo');
-    } else {
+    if (salvarErros.size > 0) {
         definirStatusSalvamento('Não foi possível salvar', 'erro');
+        return;
     }
 
-    return salvou;
+    definirStatusSalvamento('Salvo às ' + formatarHora(Date.now()), 'salvo');
+}
+
+async function salvarEntrada(diaISO, machineId) {
+    var dia = dias[diaISO];
+
+    if (!dia) {
+        return false;
+    }
+
+    var entrada = dia.maquinas.find(function (item) {
+        return item.id === machineId;
+    });
+
+    if (!entrada) {
+        return false;
+    }
+
+    var chave = chaveEntrada(diaISO, machineId);
+    var campos = camposPendentes.get(chave);
+
+    if (!campos || campos.size === 0) {
+        return true;
+    }
+
+    var pendentes = Array.from(campos);
+    camposPendentes.delete(chave);
+
+    var linha = {
+        dia: diaISO,
+        machine_id: machineId
+    };
+
+    if (pendentes.indexOf('inicio') !== -1) {
+        linha.inicio = entrada.inicio === true;
+    }
+
+    if (pendentes.indexOf('fim') !== -1) {
+        linha.fim = entrada.fim === true;
+    }
+
+    if (pendentes.indexOf('local') !== -1) {
+        linha.local = entrada.local || '';
+    }
+
+    if (pendentes.indexOf('observacao') !== -1) {
+        linha.observacao = entrada.observacao || '';
+    }
+
+    try {
+        var resposta = await cliente
+            .from('checklist_entries')
+            .upsert(linha, { onConflict: 'dia,machine_id' });
+
+        if (resposta.error) {
+            throw resposta.error;
+        }
+
+        salvarErros.delete(chave);
+        return true;
+    } catch (erro) {
+        console.error('Não foi possível salvar o checklist.', erro);
+
+        var restantes = camposPendentes.get(chave);
+
+        if (!restantes) {
+            restantes = new Set();
+            camposPendentes.set(chave, restantes);
+        }
+
+        pendentes.forEach(function (campo) {
+            restantes.add(campo);
+        });
+
+        salvarErros.add(chave);
+        return false;
+    }
+}
+
+function executarSalvamento(diaISO, machineId) {
+    var chave = chaveEntrada(diaISO, machineId);
+    var anterior = salvarFilas.get(chave) || Promise.resolve();
+
+    var proxima = anterior
+        .catch(function () {
+            return false;
+        })
+        .then(function () {
+            return salvarEntrada(diaISO, machineId);
+        });
+
+    salvarFilas.set(chave, proxima);
+
+    proxima.then(function () {
+        if (salvarFilas.get(chave) === proxima) {
+            salvarFilas.delete(chave);
+        }
+
+        atualizarStatusGlobal();
+    });
+}
+
+function agendarSalvamento(diaISO, machineId, campo) {
+    var chave = chaveEntrada(diaISO, machineId);
+    var campos = camposPendentes.get(chave);
+
+    if (!campos) {
+        campos = new Set();
+        camposPendentes.set(chave, campos);
+    }
+
+    if (campo) {
+        campos.add(campo);
+    }
+
+    salvarErros.delete(chave);
+    definirStatusSalvamento('Salvando...', 'salvando');
+
+    if (salvarTimers.has(chave)) {
+        window.clearTimeout(salvarTimers.get(chave));
+    }
+
+    salvarTimers.set(chave, window.setTimeout(function () {
+        salvarTimers.delete(chave);
+        executarSalvamento(diaISO, machineId);
+    }, 450));
+}
+
+function flushSalvamentos() {
+    var pendentes = Array.from(salvarTimers.keys());
+
+    pendentes.forEach(function (chave) {
+        var timer = salvarTimers.get(chave);
+        window.clearTimeout(timer);
+        salvarTimers.delete(chave);
+
+        var partes = chave.split('|');
+        executarSalvamento(partes[0], partes[1]);
+    });
+}
+
+function registrarAuditoria(acao, entidade, entidadeId, detalhe) {
+    if (!cliente) {
+        return;
+    }
+
+    cliente
+        .rpc('registrar_auditoria', {
+            p_acao: acao,
+            p_entidade: entidade || null,
+            p_entidade_id: entidadeId === null || typeof entidadeId === 'undefined' ? null : String(entidadeId),
+            p_detalhe: detalhe || {}
+        })
+        .then(function (resposta) {
+            if (resposta.error) {
+                console.warn('Não foi possível registrar a auditoria.', resposta.error);
+            }
+        })
+        .catch(function (erro) {
+            console.warn('Não foi possível registrar a auditoria.', erro);
+        });
 }
 
 function aplicarMensagem(elemento, texto, tipo) {
@@ -395,122 +668,56 @@ function limparMensagemExportacao() {
     }
 }
 
-function criarMaquinaDoDia(maquina) {
-    return {
-        id: maquina.id,
-        codigo: maquina.codigo,
-        inicio: false,
-        fim: false,
-        local: '',
-        observacao: '',
-        inicioEm: null,
-        fimEm: null
-    };
-}
+function configurarSetupVazio() {
+    var titulo = setupEmpty.querySelector('h3');
+    var texto = setupEmpty.querySelector('p');
 
-function criarDiaChecklist(dataISO) {
-    return {
-        data: dataISO,
-        criadoEm: Date.now(),
-        atualizadoEm: Date.now(),
-        maquinas: maquinas.map(criarMaquinaDoDia)
-    };
-}
-
-function sincronizarDiaHoje() {
-    var hoje = hojeISO();
-    var dia = dias[hoje];
-
-    if (maquinas.length === 0) {
-        if (dia) {
-            delete dias[hoje];
-            return true;
+    if (ehGestor) {
+        if (titulo) {
+            titulo.textContent = 'Cadastre as máquinas da empresa';
         }
-
-        return false;
+        if (texto) {
+            texto.textContent = 'Adicione os códigos internos para gerar automaticamente o checklist de cada dia.';
+        }
+        openMachinesBtn.hidden = false;
+        return;
     }
 
-    if (!dia) {
-        dias[hoje] = criarDiaChecklist(hoje);
-        return true;
+    if (titulo) {
+        titulo.textContent = 'Nenhuma máquina cadastrada';
     }
-
-    var porId = new Map();
-
-    maquinas.forEach(function (maquina) {
-        porId.set(maquina.id, maquina);
-    });
-
-    var alterou = false;
-    var listaAtualizada = [];
-
-    dia.maquinas.forEach(function (entrada) {
-        var maquina = porId.get(entrada.id);
-
-        if (!maquina) {
-            alterou = true;
-            return;
-        }
-
-        if (entrada.codigo !== maquina.codigo) {
-            entrada.codigo = maquina.codigo;
-            alterou = true;
-        }
-
-        listaAtualizada.push(entrada);
-    });
-
-    maquinas.forEach(function (maquina) {
-        var existe = listaAtualizada.some(function (entrada) {
-            return entrada.id === maquina.id;
-        });
-
-        if (!existe) {
-            listaAtualizada.push(criarMaquinaDoDia(maquina));
-            alterou = true;
-        }
-    });
-
-    if (alterou) {
-        listaAtualizada.sort(compararCodigos);
-        dia.maquinas = listaAtualizada;
-        dia.atualizadoEm = Date.now();
+    if (texto) {
+        texto.textContent = 'Peça a um gestor para cadastrar as máquinas da empresa.';
     }
-
-    return alterou;
-}
-
-function obterDiaAtual() {
-    return dias[dataSelecionada] || null;
-}
-
-function encontrarMaquinaNoDia(dia, id) {
-    return dia.maquinas.find(function (entrada) {
-        return entrada.id === id;
-    }) || null;
+    openMachinesBtn.hidden = true;
 }
 
 function renderizarMaquinas() {
-    var total = maquinas.length;
+    var ativas = maquinasAtivas();
+    var total = ativas.length;
     var rotulo = total === 1 ? '1 máquina' : total + ' máquinas';
 
     machineCount.textContent = rotulo;
     manageCount.textContent = String(total);
     menuBadge.textContent = String(total);
     menuBadge.hidden = total === 0;
+    menuToggle.hidden = !ehGestor;
     menuToggle.setAttribute(
         'aria-label',
         total === 0
-            ? 'Abrir cadastro de máquinas, nenhuma máquina cadastrada'
+            ? 'Abrir cadastro de máquinas, nenhuma máquina ativa'
             : 'Abrir cadastro de máquinas, ' + rotulo
     );
 
     machinesList.replaceChildren();
     machinesEmpty.hidden = total > 0;
+    machinesEmpty.textContent = maquinas.length > 0
+        ? 'Nenhuma máquina ativa no momento.'
+        : 'Nenhuma máquina cadastrada ainda.';
 
     var fragmento = document.createDocumentFragment();
 
-    maquinas.forEach(function (maquina) {
+    ativas.forEach(function (maquina) {
         var item = document.createElement('div');
         item.className = 'manage-item';
 
@@ -534,18 +741,18 @@ function renderizarMaquinas() {
             iniciarEdicaoMaquina(maquina.id);
         });
 
-        var excluir = document.createElement('button');
-        excluir.type = 'button';
-        excluir.className = 'icon-btn';
-        excluir.textContent = '×';
-        excluir.title = 'Excluir máquina';
-        excluir.setAttribute('aria-label', 'Excluir a máquina ' + maquina.codigo);
-        excluir.addEventListener('click', function () {
-            excluirMaquina(maquina.id);
+        var desativar = document.createElement('button');
+        desativar.type = 'button';
+        desativar.className = 'icon-btn';
+        desativar.textContent = '×';
+        desativar.title = 'Desativar máquina';
+        desativar.setAttribute('aria-label', 'Desativar a máquina ' + maquina.codigo);
+        desativar.addEventListener('click', function () {
+            void desativarMaquina(maquina.id);
         });
 
         acoes.appendChild(editar);
-        acoes.appendChild(excluir);
+        acoes.appendChild(desativar);
         item.appendChild(codigo);
         item.appendChild(acoes);
         fragmento.appendChild(item);
@@ -565,7 +772,7 @@ function resetarFormularioMaquina() {
 
 function iniciarEdicaoMaquina(id) {
     var maquina = maquinas.find(function (item) {
-        return item.id === id;
+        return item.id === id && item.ativo === true;
     });
 
     if (!maquina) {
@@ -589,8 +796,24 @@ function cancelarEdicaoMaquina() {
     machineCode.focus();
 }
 
-function enviarMaquina(evento) {
+function atualizarCodigosNosDias() {
+    Object.keys(dias).forEach(function (dataISO) {
+        dias[dataISO].maquinas.forEach(function (entrada) {
+            var maquina = maquinasPorId.get(entrada.id);
+
+            if (maquina) {
+                entrada.codigo = maquina.codigo;
+            }
+        });
+    });
+}
+
+async function enviarMaquina(evento) {
     evento.preventDefault();
+
+    if (!ehGestor) {
+        return;
+    }
 
     var codigo = machineCode.value.trim();
 
@@ -614,51 +837,84 @@ function enviarMaquina(evento) {
     }
 
     var editando = maquinaEmEdicaoId !== null;
-    var mensagem = 'Máquina adicionada.';
-    var salvouMaquinas;
+    var mensagem = editando ? 'Código atualizado.' : 'Máquina adicionada.';
+    var aviso = '';
 
-    if (editando) {
-        var maquina = maquinas.find(function (item) {
-            return item.id === maquinaEmEdicaoId;
-        });
+    machineSubmitBtn.disabled = true;
 
-        if (!maquina) {
-            resetarFormularioMaquina();
-            renderizarMaquinas();
-            return;
+    try {
+        if (editando) {
+            var atual = maquinas.find(function (item) {
+                return item.id === maquinaEmEdicaoId;
+            });
+
+            var respostaEdicao = await cliente
+                .from('machines')
+                .update({ codigo: codigo })
+                .eq('id', maquinaEmEdicaoId);
+
+            if (respostaEdicao.error) {
+                throw respostaEdicao.error;
+            }
+
+            if (atual) {
+                atual.codigo = codigo;
+            }
+
+            indexarMaquinas();
+            atualizarCodigosNosDias();
+            registrarAuditoria('editar_maquina', 'machines', maquinaEmEdicaoId, { codigo: codigo });
+        } else {
+            var respostaInsercao = await cliente
+                .from('machines')
+                .insert({ codigo: codigo, created_by: usuarioAtual.id })
+                .select('id, codigo, ativo, created_at')
+                .single();
+
+            if (respostaInsercao.error) {
+                throw respostaInsercao.error;
+            }
+
+            var nova = normalizarMaquina(respostaInsercao.data);
+
+            if (nova) {
+                maquinas.push(nova);
+                maquinas.sort(compararCodigos);
+                indexarMaquinas();
+                registrarAuditoria('criar_maquina', 'machines', nova.id, { codigo: nova.codigo });
+            }
         }
 
-        maquina.codigo = codigo;
-        mensagem = 'Código atualizado.';
-    } else {
-        maquinas.push({
-            id: gerarId(),
-            codigo: codigo,
-            criadoEm: Date.now()
-        });
+        try {
+            await sincronizarDiaHoje();
+        } catch (erroSincronizacao) {
+            console.error('Não foi possível atualizar o checklist de hoje.', erroSincronizacao);
+            aviso = 'Máquina salva, mas não foi possível atualizar o checklist de hoje.';
+        }
+
+        resetarFormularioMaquina();
+        renderizarMaquinas();
+        renderizarDia();
+        mostrarMensagemMaquina(aviso || mensagem, aviso ? 'erro' : 'sucesso');
+        machineCode.focus();
+    } catch (erro) {
+        console.error('Não foi possível salvar a máquina.', erro);
+
+        if (erro && erro.code === '23505') {
+            mostrarMensagemMaquina('Esse código já está cadastrado.', 'erro');
+        } else {
+            mostrarMensagemMaquina('Não foi possível salvar a máquina. Tente novamente.', 'erro');
+        }
+    } finally {
+        machineSubmitBtn.disabled = false;
     }
-
-    maquinas.sort(compararCodigos);
-    salvouMaquinas = salvarMaquinas();
-
-    if (sincronizarDiaHoje()) {
-        salvarDiasAgora();
-    }
-
-    resetarFormularioMaquina();
-    renderizarMaquinas();
-    renderizarDia();
-
-    if (salvouMaquinas) {
-        mostrarMensagemMaquina(mensagem, 'sucesso');
-    } else {
-        mostrarMensagemMaquina('Alteração feita, mas não foi possível salvar no navegador.', 'erro');
-    }
-
-    machineCode.focus();
 }
 
-function excluirMaquina(id) {
+async function desativarMaquina(id) {
+    if (!ehGestor) {
+        return;
+    }
+
     var maquina = maquinas.find(function (item) {
         return item.id === id;
     });
@@ -667,31 +923,35 @@ function excluirMaquina(id) {
         return;
     }
 
-    if (!window.confirm('Excluir a máquina "' + maquina.codigo + '"? O histórico anterior será mantido.')) {
+    if (!window.confirm('Desativar a máquina "' + maquina.codigo + '"? O histórico anterior será mantido.')) {
         return;
     }
 
-    maquinas = maquinas.filter(function (item) {
-        return item.id !== id;
-    });
+    try {
+        var resposta = await cliente
+            .from('machines')
+            .update({ ativo: false })
+            .eq('id', id);
 
-    var salvouMaquinas = salvarMaquinas();
+        if (resposta.error) {
+            throw resposta.error;
+        }
 
-    if (sincronizarDiaHoje()) {
-        salvarDiasAgora();
-    }
+        maquina.ativo = false;
+        indexarMaquinas();
 
-    if (maquinaEmEdicaoId === id) {
-        resetarFormularioMaquina();
-    }
+        if (maquinaEmEdicaoId === id) {
+            resetarFormularioMaquina();
+        }
 
-    renderizarMaquinas();
-    renderizarDia();
+        registrarAuditoria('desativar_maquina', 'machines', id, { codigo: maquina.codigo });
 
-    if (salvouMaquinas) {
-        mostrarMensagemMaquina('Máquina excluída. O histórico anterior foi mantido.', 'sucesso');
-    } else {
-        mostrarMensagemMaquina('Máquina excluída, mas não foi possível salvar no navegador.', 'erro');
+        renderizarMaquinas();
+        renderizarDia();
+        mostrarMensagemMaquina('Máquina desativada. O histórico anterior foi mantido.', 'sucesso');
+    } catch (erro) {
+        console.error('Não foi possível desativar a máquina.', erro);
+        mostrarMensagemMaquina('Não foi possível desativar a máquina. Tente novamente.', 'erro');
     }
 }
 
@@ -778,29 +1038,45 @@ function criarLinhaMaquina(dia, entrada, fase) {
     rotulo.appendChild(caixa);
     rotulo.appendChild(codigo);
 
+    var statusWrap = document.createElement('div');
+    statusWrap.className = 'machine-status-wrap';
+
     var status = document.createElement('span');
     status.className = 'machine-status';
-    status.textContent = marcado ? 'Conferido' : 'Pendente';
 
-    checkbox.addEventListener('change', function (evento) {
-        var entradaAtual = encontrarMaquinaNoDia(dia, entrada.id);
+    var autor = document.createElement('span');
+    autor.className = 'machine-author';
 
-        if (!entradaAtual) {
-            return;
-        }
+    statusWrap.appendChild(status);
+    statusWrap.appendChild(autor);
 
-        var conferido = evento.target.checked;
-        entradaAtual[fase] = conferido;
-        entradaAtual[fase + 'Em'] = conferido ? Date.now() : null;
+    function atualizarLinha() {
+        var conferido = fase === 'inicio' ? entrada.inicio : entrada.fim;
+        var textoAutor = descreverAutoria(entrada, fase);
 
         linha.classList.toggle('is-checked', conferido);
         status.textContent = conferido ? 'Conferido' : 'Pendente';
+        autor.textContent = textoAutor;
+        autor.hidden = textoAutor === '';
+        autor.title = textoAutor;
+    }
+
+    atualizarLinha();
+
+    checkbox.addEventListener('change', function (evento) {
+        var conferido = evento.target.checked;
+
+        entrada[fase] = conferido;
+        entrada[fase + 'Em'] = conferido ? Date.now() : null;
+        entrada[fase + 'Por'] = conferido ? usuarioAtual.id : null;
+
+        atualizarLinha();
         atualizarResumo(dia);
-        agendarSalvamento();
+        agendarSalvamento(dia.data, entrada.id, fase);
     });
 
     principal.appendChild(rotulo);
-    principal.appendChild(status);
+    principal.appendChild(statusWrap);
 
     var detalhes = document.createElement('div');
     detalhes.className = 'machine-details';
@@ -821,14 +1097,8 @@ function criarLinhaMaquina(dia, entrada, fase) {
     inputLocal.setAttribute('aria-label', 'Local ou destino da máquina ' + entrada.codigo);
 
     inputLocal.addEventListener('input', function (evento) {
-        var entradaAtual = encontrarMaquinaNoDia(dia, entrada.id);
-
-        if (!entradaAtual) {
-            return;
-        }
-
-        entradaAtual.local = evento.target.value;
-        agendarSalvamento();
+        entrada.local = evento.target.value;
+        agendarSalvamento(dia.data, entrada.id, 'local');
     });
 
     campoLocal.appendChild(rotuloLocal);
@@ -850,14 +1120,8 @@ function criarLinhaMaquina(dia, entrada, fase) {
     inputObservacao.setAttribute('aria-label', 'Observação da máquina ' + entrada.codigo);
 
     inputObservacao.addEventListener('input', function (evento) {
-        var entradaAtual = encontrarMaquinaNoDia(dia, entrada.id);
-
-        if (!entradaAtual) {
-            return;
-        }
-
-        entradaAtual.observacao = evento.target.value;
-        agendarSalvamento();
+        entrada.observacao = evento.target.value;
+        agendarSalvamento(dia.data, entrada.id, 'observacao');
     });
 
     campoObservacao.appendChild(rotuloObservacao);
@@ -882,6 +1146,9 @@ function renderizarLista(dia) {
     if (lista.length === 0) {
         checklistList.hidden = true;
         listEmpty.hidden = false;
+        listEmpty.textContent = dia.maquinas.length === 0
+            ? 'Nenhuma máquina neste checklist.'
+            : 'Nenhuma máquina encontrada com esse código.';
         return;
     }
 
@@ -899,7 +1166,8 @@ function renderizarLista(dia) {
 
 function renderizarDia() {
     var hoje = hojeISO();
-    var dia = obterDiaAtual();
+    var dia = dias[dataSelecionada];
+    var ativas = maquinasAtivas();
 
     dateLabel.textContent = formatarDataLonga(dataSelecionada);
     datePicker.value = dataSelecionada;
@@ -907,11 +1175,12 @@ function renderizarDia() {
     nextDayBtn.disabled = dataSelecionada >= hoje;
     todayBtn.disabled = dataSelecionada === hoje;
 
-    if (maquinas.length === 0) {
+    if (!dia && ativas.length === 0) {
         setupEmpty.hidden = false;
         dayEmpty.hidden = true;
         dayContent.hidden = true;
         saveStatus.hidden = true;
+        configurarSetupVazio();
         return;
     }
 
@@ -920,7 +1189,14 @@ function renderizarDia() {
         dayEmpty.hidden = false;
         dayContent.hidden = true;
         saveStatus.hidden = true;
-        dayEmptyText.textContent = 'Nenhum checklist registrado em ' + formatarDataBR(dataSelecionada) + '.';
+        createDayBtn.hidden = ativas.length === 0;
+
+        if (ativas.length === 0) {
+            dayEmptyText.textContent = 'Nenhuma máquina ativa. Peça a um gestor para cadastrar ou reativar máquinas.';
+        } else {
+            dayEmptyText.textContent = 'Nenhum checklist registrado em ' + formatarDataBR(dataSelecionada) + '.';
+        }
+
         return;
     }
 
@@ -939,7 +1215,7 @@ function selecionarFase(fase) {
 
     faseAtiva = fase;
 
-    var dia = obterDiaAtual();
+    var dia = dias[dataSelecionada];
 
     if (!dia) {
         return;
@@ -960,34 +1236,39 @@ function mudarData(novaData) {
         novaData = hoje;
     }
 
-    if (salvarTimer) {
-        salvarDiasAgora();
-    }
-
+    flushSalvamentos();
     dataSelecionada = novaData;
     machineSearch.value = '';
-
-    if (dataSelecionada === hoje && sincronizarDiaHoje()) {
-        salvarDiasAgora();
-    }
-
     renderizarDia();
 }
 
-function criarChecklistDoDia() {
-    if (maquinas.length === 0) {
-        abrirCadastroMaquinas();
-        return;
-    }
+async function criarChecklistDoDia() {
+    var ativas = maquinasAtivas();
 
     if (dias[dataSelecionada]) {
         renderizarDia();
         return;
     }
 
-    dias[dataSelecionada] = criarDiaChecklist(dataSelecionada);
-    salvarDiasAgora();
-    renderizarDia();
+    if (ativas.length === 0) {
+        renderizarDia();
+        return;
+    }
+
+    createDayBtn.disabled = true;
+    dayEmptyText.textContent = 'Criando checklist...';
+
+    try {
+        await criarDiaNoBanco(dataSelecionada, ativas);
+        dias[dataSelecionada] = criarDiaLocal(dataSelecionada, ativas);
+        renderizarDia();
+        definirStatusSalvamento('Checklist criado.', 'salvo');
+    } catch (erro) {
+        console.error('Não foi possível criar o checklist.', erro);
+        dayEmptyText.textContent = 'Não foi possível criar o checklist. Tente novamente.';
+    } finally {
+        createDayBtn.disabled = false;
+    }
 }
 
 function obterDiasParaExportacao(inicio, fim) {
@@ -1012,7 +1293,18 @@ function escaparCSV(valor) {
 }
 
 function gerarCSV(registros) {
-    var linhas = [['Data', 'Código da máquina', 'Início', 'Fim', 'Local', 'Observação']];
+    var linhas = [[
+        'Data',
+        'Código da máquina',
+        'Início',
+        'Início por',
+        'Início em',
+        'Fim',
+        'Fim por',
+        'Fim em',
+        'Local',
+        'Observação'
+    ]];
 
     registros.forEach(function (dia) {
         dia.maquinas.slice().sort(compararCodigos).forEach(function (entrada) {
@@ -1020,7 +1312,11 @@ function gerarCSV(registros) {
                 formatarDataBR(dia.data),
                 entrada.codigo,
                 entrada.inicio ? 'Conferido' : 'Pendente',
+                nomePorId(entrada.inicioPor),
+                formatarDataHora(entrada.inicioEm),
                 entrada.fim ? 'Conferido' : 'Pendente',
+                nomePorId(entrada.fimPor),
+                formatarDataHora(entrada.fimEm),
                 entrada.local,
                 entrada.observacao
             ]);
@@ -1066,6 +1362,11 @@ function exportarTudo() {
         'CSV gerado com ' + csv.total + (csv.total === 1 ? ' registro.' : ' registros.'),
         'sucesso'
     );
+    registrarAuditoria('exportar_checklist', 'checklist', null, {
+        inicio: 'todos',
+        fim: hojeISO(),
+        registros: csv.total
+    });
 }
 
 function exportarIntervalo(evento) {
@@ -1103,6 +1404,11 @@ function exportarIntervalo(evento) {
         'CSV gerado com ' + csv.total + (csv.total === 1 ? ' registro.' : ' registros.'),
         'sucesso'
     );
+    registrarAuditoria('exportar_checklist', 'checklist', null, {
+        inicio: inicio,
+        fim: fim,
+        registros: csv.total
+    });
 }
 
 function abrirDialogo(dialogo) {
@@ -1129,6 +1435,10 @@ function fecharDialogo(dialogo, foco) {
 }
 
 function abrirCadastroMaquinas() {
+    if (!ehGestor) {
+        return;
+    }
+
     abrirDialogo(machinesMenu);
     menuToggle.setAttribute('aria-expanded', 'true');
 }
@@ -1179,7 +1489,7 @@ function tratarTecladoAbas(evento) {
     }
 }
 
-function iniciar() {
+function atribuirElementos() {
     menuToggle = document.getElementById('menuToggle');
     menuBadge = document.getElementById('menuBadge');
     machinesMenu = document.getElementById('machinesMenu');
@@ -1230,29 +1540,15 @@ function iniciar() {
     exportStart = document.getElementById('exportStart');
     exportEnd = document.getElementById('exportEnd');
     exportMessage = document.getElementById('exportMessage');
+}
 
-    maquinas = lerMaquinas();
-    dias = lerDias();
-    dataSelecionada = hojeISO();
-
-    var hoje = hojeISO();
-    datePicker.max = hoje;
-    exportStart.max = hoje;
-    exportEnd.max = hoje;
-    exportEnd.value = hoje;
-    exportStart.value = somarDias(hoje, -6);
-
-    if (sincronizarDiaHoje()) {
-        salvarDias();
-    }
-
-    renderizarMaquinas();
-    renderizarDia();
-
+function ligarEventos() {
     menuToggle.addEventListener('click', abrirCadastroMaquinas);
     openMachinesBtn.addEventListener('click', abrirCadastroMaquinas);
     closeMachinesBtn.addEventListener('click', fecharCadastroMaquinas);
-    machineForm.addEventListener('submit', enviarMaquina);
+    machineForm.addEventListener('submit', function (evento) {
+        void enviarMaquina(evento);
+    });
     cancelMachineBtn.addEventListener('click', cancelarEdicaoMaquina);
 
     machineCode.addEventListener('input', function () {
@@ -1288,7 +1584,9 @@ function iniciar() {
         mudarData(datePicker.value);
     });
 
-    createDayBtn.addEventListener('click', criarChecklistDoDia);
+    createDayBtn.addEventListener('click', function () {
+        void criarChecklistDoDia();
+    });
 
     startTab.addEventListener('click', function () {
         selecionarFase('inicio');
@@ -1302,7 +1600,7 @@ function iniciar() {
     endTab.addEventListener('keydown', tratarTecladoAbas);
 
     machineSearch.addEventListener('input', function () {
-        var dia = obterDiaAtual();
+        var dia = dias[dataSelecionada];
 
         if (dia) {
             renderizarLista(dia);
@@ -1349,17 +1647,82 @@ function iniciar() {
     exportStart.addEventListener('input', limparMensagemExportacao);
     exportEnd.addEventListener('input', limparMensagemExportacao);
 
-    window.addEventListener('beforeunload', function () {
-        if (salvarTimer) {
-            salvarDias();
-        }
-    });
+    window.addEventListener('beforeunload', flushSalvamentos);
 
     document.addEventListener('visibilitychange', function () {
-        if (document.hidden && salvarTimer) {
-            salvarDias();
+        if (document.hidden) {
+            flushSalvamentos();
         }
     });
 }
 
-iniciar();
+async function iniciarChecklist() {
+    var loading = document.getElementById('authLoading');
+
+    cliente = window.organizaaiClient;
+
+    if (!cliente || !window.OrganizaAuth) {
+        loading.textContent = 'Não foi possível conectar ao serviço. Recarregue a página.';
+        return;
+    }
+
+    var contexto = null;
+
+    try {
+        contexto = await window.OrganizaAuth.requireAuth();
+    } catch (erro) {
+        console.error('Falha ao validar a sessão.', erro);
+        loading.textContent = 'Não foi possível validar sua sessão. Recarregue a página.';
+        return;
+    }
+
+    if (!contexto) {
+        return;
+    }
+
+    usuarioAtual = contexto.user;
+    perfilAtual = contexto.profile;
+    ehGestor = perfilAtual.role === 'gestor';
+
+    atribuirElementos();
+
+    document.body.classList.add('has-user-menu', 'checklist-page');
+    window.OrganizaAuth.renderUserMenu(perfilAtual);
+
+    dataSelecionada = hojeISO();
+
+    var hoje = hojeISO();
+    datePicker.max = hoje;
+    exportStart.max = hoje;
+    exportEnd.max = hoje;
+    exportEnd.value = hoje;
+    exportStart.value = somarDias(hoje, -6);
+
+    definirStatusSalvamento('Carregando dados...', 'salvando');
+
+    try {
+        nomesMapa = await window.OrganizaAuth.carregarNomes();
+        await carregarMaquinas();
+        await carregarDias();
+        await sincronizarDiaHoje();
+    } catch (erro) {
+        console.error('Não foi possível carregar os dados do checklist.', erro);
+        loading.textContent = 'Não foi possível carregar os dados. Recarregue a página.';
+        return;
+    }
+
+    menuToggle.hidden = !ehGestor;
+    openMachinesBtn.hidden = !ehGestor;
+    renderizarMaquinas();
+    renderizarDia();
+    ligarEventos();
+
+    document.querySelector('header.brand').hidden = false;
+    document.querySelector('main.app-container').hidden = false;
+    document.getElementById('userMenu').hidden = false;
+    loading.hidden = true;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    void iniciarChecklist();
+});

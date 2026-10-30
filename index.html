@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OrganizaAi · Lista de Tarefas</title>
-    <link rel="stylesheet" href="todolist.css" />
+    <link rel="stylesheet" href="assets/css/todolist.css" />
+    <link rel="stylesheet" href="assets/css/auth.css" />
   </head>
   <body>
-    <header class="brand" aria-label="OrganizaAi">
+    <div id="authLoading" class="auth-loading" role="status" aria-live="polite">Carregando...</div>
+
+    <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
+
+    <header class="brand" aria-label="OrganizaAi" hidden>
       <a
         class="brand-link"
         href="ChecklistAi/index.html"
@@ -19,7 +24,7 @@
       </a>
     </header>
 
-    <main class="todo-container" aria-label="Lista de tarefas">
+    <main class="todo-container" aria-label="Lista de tarefas" hidden>
       <div class="modal-mark" aria-hidden="true">
         <div class="avatar-ring"><span>OA</span></div>
       </div>
@@ -31,15 +36,19 @@
           placeholder="No que você está trabalhando?"
           aria-label="Nova tarefa"
         />
-        <button id="addBtn" onclick="adicionarTarefa(), atualizarContador()">Adicionar</button>
+        <button id="addBtn" onclick="adicionarTarefa()">Adicionar</button>
       </div>
 
       <div id="count" aria-live="polite"></div>
+      <div id="statusTarefas" class="form-message" role="status" aria-live="polite"></div>
       <div id="divFiltros"></div>
       <ul id="listaTarefas"></ul>
       <div id="divLimpar"></div>
     </main>
 
-    <script src="todolist.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabase-config.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/todolist.js"></script>
   </body>
 </html>

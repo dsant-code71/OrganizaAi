@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar · OrganizaAi</title>
+    <link rel="stylesheet" href="assets/css/auth.css" />
+  </head>
+  <body class="auth-body">
+    <main class="auth-card" aria-labelledby="loginTitulo">
+      <div class="auth-brand">
+        <div class="avatar-ring"><span>OA</span></div>
+        <h1>OrganizaAi</h1>
+        <p>Tarefas e checklists da empresa em um só lugar.</p>
+      </div>
+
+      <section id="secaoLogin" aria-labelledby="loginTitulo">
+        <h2 id="loginTitulo">Entrar na sua conta</h2>
+        <p class="auth-subtitle">Use o email cadastrado pelo gestor da sua equipe.</p>
+
+        <div id="avisoLogin" class="notice" role="status" aria-live="polite" hidden></div>
+
+        <form id="formLogin" novalidate>
+          <div class="field">
+            <label for="loginEmail">Email</label>
+            <input
+              type="email"
+              id="loginEmail"
+              name="email"
+              autocomplete="username"
+              inputmode="email"
+              placeholder="voce@empresa.com"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="loginSenha">Senha</label>
+            <input
+              type="password"
+              id="loginSenha"
+              name="password"
+              autocomplete="current-password"
+              placeholder="Sua senha"
+              required
+            />
+          </div>
+
+          <div id="mensagemLogin" class="form-message" role="status" aria-live="polite"></div>
+
+          <button type="submit" id="btnEntrar" class="btn-primary">Entrar</button>
+        </form>
+
+        <p class="auth-footnote">
+          Esqueceu a senha? Solicite a redefinição a um gestor.
+        </p>
+      </section>
+
+      <section id="secaoTroca" aria-labelledby="trocaTitulo" hidden>
+        <h2 id="trocaTitulo">Crie uma nova senha</h2>
+        <p class="auth-subtitle" id="trocaSubtitulo">
+          Este é seu primeiro acesso ou sua senha foi redefinida. Defina uma nova senha para continuar.
+        </p>
+
+        <div id="avisoTroca" class="notice" role="status" aria-live="polite" hidden></div>
+
+        <form id="formTroca" novalidate>
+          <div class="field">
+            <label for="novaSenha">Nova senha</label>
+            <input
+              type="password"
+              id="novaSenha"
+              autocomplete="new-password"
+              minlength="8"
+              placeholder="Mínimo de 8 caracteres"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="confirmarSenha">Confirmar nova senha</label>
+            <input
+              type="password"
+              id="confirmarSenha"
+              autocomplete="new-password"
+              minlength="8"
+              placeholder="Repita a nova senha"
+              required
+            />
+          </div>
+
+          <div id="mensagemTroca" class="form-message" role="status" aria-live="polite"></div>
+
+          <button type="submit" id="btnTrocar" class="btn-primary">Salvar nova senha</button>
+        </form>
+
+        <p class="auth-footnote">
+          A senha deve ter pelo menos 8 caracteres.
+        </p>
+      </section>
+
+      <div class="auth-links">
+        <a href="index.html">OrganizaAi</a>
+        <a href="ChecklistAi/index.html">ChecklistAi</a>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabase-config.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/login.js"></script>
+  </body>
+</html>
