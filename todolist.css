@@ -76,12 +76,30 @@ body {
     z-index: 20;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 16px 6px 6px;
     background: var(--surface);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-pill);
     box-shadow: var(--shadow);
+    transition: box-shadow 0.2s ease;
+}
+
+.brand:hover {
+    box-shadow: var(--shadow-hover);
+}
+
+.brand-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 16px 6px 6px;
+    border-radius: var(--radius-pill);
+    color: inherit;
+    text-decoration: none;
+}
+
+.brand-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
 }
 
 .brand h1 {

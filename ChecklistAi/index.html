@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChecklistAi · Checklist diário de máquinas</title>
+    <link rel="stylesheet" href="checklist.css" />
+  </head>
+  <body>
+    <header class="brand" aria-label="ChecklistAi">
+      <a
+        class="brand-link"
+        href="../index.html"
+        title="Ir para OrganizaAi"
+        aria-label="ChecklistAi — ir para OrganizaAi"
+      >
+        <div class="avatar-ring"><span>CA</span></div>
+        <h1>ChecklistAi</h1>
+      </a>
+    </header>
+
+    <button
+      type="button"
+      id="menuToggle"
+      class="menu-toggle"
+      aria-label="Abrir cadastro de máquinas"
+      aria-haspopup="dialog"
+      aria-controls="machinesMenu"
+      aria-expanded="false"
+    >
+      <span class="menu-icon" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      <span id="menuBadge" class="menu-badge" aria-hidden="true" hidden>0</span>
+    </button>
+
+    <main class="app-container" aria-label="Checklist diário de máquinas">
+      <div class="page-heading">
+        <div>
+          <span class="eyebrow">Uso diário</span>
+          <h2>Checklist de máquinas</h2>
+          <p>Confira cada máquina no início e no fim do dia.</p>
+        </div>
+        <span id="saveStatus" class="save-status" role="status" aria-live="polite">
+          Dados salvos automaticamente
+        </span>
+      </div>
+
+      <section class="day-toolbar" aria-label="Seleção de data e exportação">
+        <div class="date-nav">
+          <button type="button" id="prevDayBtn" class="icon-btn" aria-label="Dia anterior">←</button>
+          <label class="date-picker-label" for="datePicker">
+            <span id="dateLabel" class="date-label"></span>
+            <input type="date" id="datePicker" aria-label="Selecionar data do checklist" />
+          </label>
+          <button type="button" id="nextDayBtn" class="icon-btn" aria-label="Próximo dia">→</button>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" id="todayBtn" class="btn-ghost">Hoje</button>
+          <button
+            type="button"
+            id="openExportBtn"
+            class="btn-ghost"
+            aria-haspopup="dialog"
+            aria-controls="exportDialog"
+            aria-expanded="false"
+          >
+            Exportar CSV
+          </button>
+        </div>
+      </section>
+
+      <div id="setupEmpty" class="empty-state setup-empty" hidden>
+        <h3>Cadastre as máquinas da empresa</h3>
+        <p>Adicione os códigos internos para gerar automaticamente o checklist de cada dia.</p>
+        <button type="button" id="openMachinesBtn" class="btn-primary">Abrir cadastro de máquinas</button>
+      </div>
+
+      <div id="dayEmpty" class="empty-state" hidden>
+        <h3>Nenhum checklist nesta data</h3>
+        <p id="dayEmptyText">Crie o checklist para começar o registro deste dia.</p>
+        <button type="button" id="createDayBtn" class="btn-primary">Criar checklist para esta data</button>
+      </div>
+
+      <div id="dayContent" hidden>
+        <section class="summary-grid" aria-label="Resumo do dia">
+          <article class="stat-card">
+            <span class="stat-label">Máquinas</span>
+            <strong id="statTotal">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Início conferido</span>
+            <strong id="statStart">0/0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Fim conferido</span>
+            <strong id="statEnd">0/0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Pendências</span>
+            <strong id="statPending">0</strong>
+          </article>
+        </section>
+
+        <section class="checklist-panel" aria-labelledby="checklistPanelTitle">
+          <h3 id="checklistPanelTitle" class="sr-only">Máquinas do dia</h3>
+
+          <div class="checklist-toolbar">
+            <div class="phase-tabs" role="tablist" aria-label="Fase do checklist">
+              <button
+                type="button"
+                id="startTab"
+                class="phase-tab is-active"
+                role="tab"
+                aria-selected="true"
+                aria-controls="checklistList"
+                data-phase="inicio"
+              >
+                Início do dia
+                <span id="startTabCount" class="tab-count">0/0</span>
+              </button>
+              <button
+                type="button"
+                id="endTab"
+                class="phase-tab"
+                role="tab"
+                aria-selected="false"
+                aria-controls="checklistList"
+                data-phase="fim"
+              >
+                Fim do dia
+                <span id="endTabCount" class="tab-count">0/0</span>
+              </button>
+            </div>
+
+            <label class="search-field" for="machineSearch">
+              <span class="sr-only">Buscar máquina pelo código</span>
+              <input
+                type="search"
+                id="machineSearch"
+                placeholder="Buscar código..."
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+          <p id="phaseHint" class="phase-hint"></p>
+
+          <div
+            id="checklistList"
+            class="machine-list"
+            role="tabpanel"
+            aria-live="polite"
+          ></div>
+          <div id="listEmpty" class="empty-state list-empty" hidden>
+            Nenhuma máquina encontrada com esse código.
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="machinesMenu" class="models-menu" aria-labelledby="machinesMenuTitle">
+      <header class="models-menu-header">
+        <div class="models-menu-title">
+          <h2 id="machinesMenuTitle">Máquinas da empresa</h2>
+          <span id="machineCount" class="count-badge" aria-live="polite">0 máquinas</span>
+        </div>
+        <button
+          type="button"
+          id="closeMachinesBtn"
+          class="icon-btn"
+          aria-label="Fechar cadastro de máquinas"
+          title="Fechar"
+        >
+          ×
+        </button>
+      </header>
+
+      <div class="models-menu-body">
+        <p class="drawer-intro">
+          O cadastro vale para todos os dias e é clonado automaticamente para o início e o fim de cada dia.
+        </p>
+
+        <form id="machineForm" novalidate>
+          <label class="field-label" for="machineCode">Código da máquina</label>
+          <div class="machine-form-row">
+            <input
+              type="text"
+              id="machineCode"
+              name="machineCode"
+              placeholder="Ex.: MAQ-001"
+              maxlength="40"
+              autocomplete="off"
+            />
+            <button type="submit" id="machineSubmitBtn" class="btn-primary">Adicionar</button>
+          </div>
+          <div class="machine-form-actions">
+            <button type="button" id="cancelMachineBtn" class="btn-ghost" hidden>
+              Cancelar edição
+            </button>
+          </div>
+          <div id="machineFormMessage" class="form-message" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="manage-heading">
+          <span class="field-label">Códigos cadastrados</span>
+          <span id="manageCount" class="manage-count">0</span>
+        </div>
+
+        <div id="machinesEmpty" class="empty-state">
+          Nenhuma máquina cadastrada ainda.
+        </div>
+        <div id="machinesList" class="manage-list"></div>
+      </div>
+    </dialog>
+
+    <dialog id="exportDialog" class="export-dialog" aria-labelledby="exportTitle">
+      <header class="export-header">
+        <div>
+          <h2 id="exportTitle">Exportar CSV</h2>
+          <p>Baixe uma planilha com os registros de início, fim, local e observação.</p>
+        </div>
+        <button
+          type="button"
+          id="closeExportBtn"
+          class="icon-btn"
+          aria-label="Fechar exportação"
+          title="Fechar"
+        >
+          ×
+        </button>
+      </header>
+
+      <div class="export-body">
+        <button type="button" id="exportAllBtn" class="btn-primary">
+          Exportar todo o histórico
+        </button>
+
+        <div class="export-divider"><span>ou escolha um intervalo</span></div>
+
+        <form id="exportForm" novalidate>
+          <div class="range-grid">
+            <label class="machine-field" for="exportStart">
+              <span>Data inicial</span>
+              <input type="date" id="exportStart" required />
+            </label>
+            <label class="machine-field" for="exportEnd">
+              <span>Data final</span>
+              <input type="date" id="exportEnd" required />
+            </label>
+          </div>
+          <div id="exportMessage" class="form-message" role="status" aria-live="polite"></div>
+          <button type="submit" class="btn-primary">Exportar intervalo</button>
+        </form>
+      </div>
+    </dialog>
+
+    <script src="checklist.js"></script>
+  </body>
+</html>
