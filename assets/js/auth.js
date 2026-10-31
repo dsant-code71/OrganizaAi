@@ -155,6 +155,10 @@
             container.appendChild(linkUsuarios);
         }
 
+        if (window.OrganizaTema) {
+            window.OrganizaTema.montarBotao(container);
+        }
+
         var sair = document.createElement('button');
         sair.type = 'button';
         sair.className = 'user-logout';
