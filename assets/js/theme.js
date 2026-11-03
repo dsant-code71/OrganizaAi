@@ -39,7 +39,16 @@
         var escuro = tema === 'dark';
 
         document.querySelectorAll('[data-theme-toggle]').forEach(function (botao) {
-            botao.textContent = escuro ? 'Claro' : 'Escuro';
+            var label = botao.querySelector('.theme-toggle-label');
+
+            if (!label) {
+                botao.replaceChildren();
+                label = document.createElement('span');
+                label.className = 'theme-toggle-label';
+                botao.appendChild(label);
+            }
+
+            label.textContent = escuro ? 'Claro' : 'Escuro';
             botao.setAttribute('aria-label', rotulo(tema));
             botao.setAttribute('title', rotulo(tema));
             botao.setAttribute('aria-pressed', escuro ? 'true' : 'false');
@@ -68,13 +77,23 @@
         botao.type = 'button';
         botao.className = 'theme-toggle' + (classeExtra ? ' ' + classeExtra : '');
         botao.setAttribute('data-theme-toggle', '');
+
+        var tema = temaAtual();
+        var label = document.createElement('span');
+        label.className = 'theme-toggle-label';
+        label.textContent = tema === 'dark' ? 'Claro' : 'Escuro';
+        botao.appendChild(label);
+        botao.setAttribute('aria-label', rotulo(tema));
+        botao.setAttribute('title', rotulo(tema));
+        botao.setAttribute('aria-pressed', tema === 'dark' ? 'true' : 'false');
+
         botao.addEventListener('click', alternarTema);
         container.appendChild(botao);
         atualizarBotoes(temaAtual());
         return botao;
     }
 
-    function montarBotao(container) {
+    function montarBotao(container, classeExtra) {
         if (!container) {
             return null;
         }
@@ -82,11 +101,15 @@
         var existente = container.querySelector('[data-theme-toggle]');
 
         if (existente) {
+            if (classeExtra) {
+                existente.classList.add(classeExtra);
+            }
+
             atualizarBotoes(temaAtual());
             return existente;
         }
 
-        return criarBotao(container);
+        return criarBotao(container, classeExtra);
     }
 
     function montarBotaoFlutuante() {
