@@ -350,25 +350,30 @@ function limparTarefas() {
     atualizarContador()
 }
 
-document.getElementById('tarefaInput').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        adicionarTarefa(document.getElementById('tarefaInput').value);
+document.getElementById('tarefaInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        if (document.getElementById('tarefaInput').value.trim() !== '') {
+            adicionarTarefa();
+        }
     }
 });
 
 document.getElementById('divLimpar').innerHTML += '<button id="btnLimpar" onclick="limparTarefas();">Limpar lista</button>';
 
 document.getElementById('divFiltros').innerHTML = `
-    <button id="btnTodas" class="filter-chip active" data-filtro="todas" onclick="filtrarTarefas('todas');">Todas</button>
-    <button id="btnConcluidas" class="filter-chip" data-filtro="concluidas" onclick="filtrarTarefas('concluidas');">Concluídas</button>
-    <button id="btnNaoConcluidas" class="filter-chip" data-filtro="naoConcluidas" onclick="filtrarTarefas('naoConcluidas');">Não Concluídas</button>
+    <button id="btnTodas" class="filter-chip active" data-filtro="todas" aria-pressed="true" onclick="filtrarTarefas('todas');">Todas</button>
+    <button id="btnConcluidas" class="filter-chip" data-filtro="concluidas" aria-pressed="false" onclick="filtrarTarefas('concluidas');">Concluídas</button>
+    <button id="btnNaoConcluidas" class="filter-chip" data-filtro="naoConcluidas" aria-pressed="false" onclick="filtrarTarefas('naoConcluidas');">Não Concluídas</button>
 `;
 
 function filtrarTarefas(filtro) {
     filtroAtual = filtro;
 
     document.querySelectorAll('#divFiltros button').forEach(function (botao) {
-        botao.classList.toggle('active', botao.dataset.filtro === filtro);
+        var ativo = botao.dataset.filtro === filtro;
+        botao.classList.toggle('active', ativo);
+        botao.setAttribute('aria-pressed', ativo ? 'true' : 'false');
     });
 
     var tarefas = document.querySelectorAll("#listaTarefas li");
