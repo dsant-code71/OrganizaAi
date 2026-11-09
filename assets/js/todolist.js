@@ -9,6 +9,8 @@ var cliente = null;
 var usuarioAtual = null;
 var tarefas = [];
 var statusTimer = null;
+var autenticacaoAtiva = window.ORGANIZAAI_AUTH_ENABLED === true;
+var CHAVE_TAREFAS_VISITANTE = 'organizaai.tarefas.visitante.v1';
 
 function gerarId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -36,7 +38,9 @@ function normalizarTarefa(bruto) {
         concluida: bruto.concluida === true,
         prioridade: prioridadeDoBanco(bruto.prioridade),
         ordem: typeof bruto.ordem === 'number' ? bruto.ordem : 0,
-        criadoEm: bruto.created_at ? Date.parse(bruto.created_at) : Date.now()
+        criadoEm: bruto.created_at
+            ? Date.parse(bruto.created_at)
+            : (typeof bruto.criadoEm === 'number' ? bruto.criadoEm : Date.now())
     };
 }
 
@@ -60,6 +64,34 @@ function mostrarStatus(texto, tipo) {
             elemento.textContent = '';
             elemento.className = 'form-message';
         }, 4000);
+    }
+}
+
+function lerTarefasLocais() {
+    try {
+        var bruto = window.localStorage.getItem(CHAVE_TAREFAS_VISITANTE);
+
+        if (!bruto) {
+            return [];
+        }
+
+        var dados = JSON.parse(bruto);
+
+        return Array.isArray(dados) ? dados.map(normalizarTarefa) : [];
+    } catch (erro) {
+        console.error('Não foi possível ler as tarefas locais.', erro);
+        return [];
+    }
+}
+
+function salvarTarefasLocais() {
+    try {
+        window.localStorage.setItem(CHAVE_TAREFAS_VISITANTE, JSON.stringify(tarefas));
+        return true;
+    } catch (erro) {
+        console.error('Não foi possível salvar as tarefas locais.', erro);
+        mostrarStatus('Não foi possível salvar as tarefas neste navegador.', 'error');
+        return false;
     }
 }
 
@@ -316,6 +348,12 @@ function renderizarTarefas() {
 }
 
 async function obterProximaOrdem() {
+    if (!autenticacaoAtiva) {
+        return tarefas.reduce(function (maior, tarefa) {
+            return Math.max(maior, Number(tarefa.ordem) || 0);
+        }, 0) + 1;
+    }
+
     var resposta = await cliente
         .from('tasks')
         .select('ordem')
@@ -333,6 +371,13 @@ async function obterProximaOrdem() {
 
 async function carregarTarefas() {
     mostrarStatus('Carregando tarefas...', 'info');
+
+    if (!autenticacaoAtiva) {
+        tarefas = lerTarefasLocais();
+        renderizarTarefas();
+        mostrarStatus('', '');
+        return;
+    }
 
     try {
         var resposta = await cliente
@@ -369,6 +414,31 @@ async function adicionarTarefa() {
 
     try {
         var ordem = await obterProximaOrdem();
+
+        if (!autenticacaoAtiva) {
+            var novaTarefa = normalizarTarefa({
+                id: gerarId(),
+                texto: tarefaTexto,
+                concluida: false,
+                prioridade: 'nenhuma',
+                ordem: ordem,
+                criadoEm: Date.now()
+            });
+
+            tarefas.push(novaTarefa);
+
+            if (!salvarTarefasLocais()) {
+                tarefas.pop();
+                return;
+            }
+
+            tarefaInput.value = '';
+            tarefaInput.focus();
+            renderizarTarefas();
+            mostrarStatus('Tarefa adicionada.', 'success');
+            return;
+        }
+
         var resposta = await cliente
             .from('tasks')
             .insert({
@@ -400,6 +470,21 @@ async function adicionarTarefa() {
 
 async function atualizarTarefa(id, concluida, prioridade) {
     try {
+        if (!autenticacaoAtiva) {
+            var tarefa = tarefas.find(function (item) {
+                return item.id === id;
+            });
+
+            if (!tarefa) {
+                return false;
+            }
+
+            tarefa.concluida = concluida === true;
+            tarefa.prioridade = prioridade;
+
+            return salvarTarefasLocais();
+        }
+
         var resposta = await cliente
             .from('tasks')
             .update({
@@ -422,6 +507,25 @@ async function atualizarTarefa(id, concluida, prioridade) {
 
 async function removerTarefa(id) {
     try {
+        if (!autenticacaoAtiva) {
+            var indice = tarefas.findIndex(function (tarefa) {
+                return tarefa.id === id;
+            });
+
+            if (indice === -1) {
+                return false;
+            }
+
+            var removida = tarefas.splice(indice, 1)[0];
+
+            if (!salvarTarefasLocais()) {
+                tarefas.splice(indice, 0, removida);
+                return false;
+            }
+
+            return true;
+        }
+
         var resposta = await cliente.from('tasks').delete().eq('id', id);
 
         if (resposta.error) {
@@ -441,6 +545,20 @@ async function removerTarefa(id) {
 }
 
 async function limparTarefas() {
+    if (!autenticacaoAtiva) {
+        var anteriores = tarefas.slice();
+        tarefas = [];
+
+        if (!salvarTarefasLocais()) {
+            tarefas = anteriores;
+            return;
+        }
+
+        renderizarTarefas();
+        mostrarStatus('Lista limpa.', 'success');
+        return;
+    }
+
     if (!usuarioAtual) {
         return;
     }
@@ -525,6 +643,10 @@ function ligarEventos() {
 
     botaoAdicionar.disabled = true;
 
+    botaoAdicionar.addEventListener('click', function () {
+        void adicionarTarefa();
+    });
+
     tarefaInput.addEventListener('input', function () {
         botaoAdicionar.disabled = tarefaInput.value.trim() === '';
     });
@@ -542,28 +664,35 @@ async function iniciarTarefas() {
 
     cliente = window.organizaaiClient;
 
-    if (!cliente || !window.OrganizaAuth) {
+    if (!window.OrganizaAuth || (autenticacaoAtiva && !cliente)) {
         loading.textContent = 'Não foi possível conectar ao serviço. Recarregue a página.';
         return;
     }
 
     var contexto = null;
 
-    try {
-        contexto = await window.OrganizaAuth.requireAuth();
-    } catch (erro) {
-        console.error('Falha ao validar a sessão.', erro);
-        loading.textContent = 'Não foi possível validar sua sessão. Recarregue a página.';
-        return;
+    if (autenticacaoAtiva) {
+        try {
+            contexto = await window.OrganizaAuth.requireAuth();
+        } catch (erro) {
+            console.error('Falha ao validar a sessão.', erro);
+            loading.textContent = 'Não foi possível validar sua sessão. Recarregue a página.';
+            return;
+        }
+
+        if (!contexto) {
+            return;
+        }
+
+        usuarioAtual = contexto.user;
+        window.OrganizaAuth.renderUserMenu(contexto.profile);
+    } else {
+        usuarioAtual = null;
+        window.OrganizaAuth.renderUserMenu(
+            { nome_completo: 'Visitante', email: 'Dados salvos neste navegador' },
+            { visitante: true }
+        );
     }
-
-    if (!contexto) {
-        return;
-    }
-
-    usuarioAtual = contexto.user;
-
-    window.OrganizaAuth.renderUserMenu(contexto.profile);
 
     document.querySelector('header.brand').hidden = false;
     document.querySelector('main.todo-container').hidden = false;

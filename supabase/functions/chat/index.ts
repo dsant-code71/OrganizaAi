@@ -45,10 +45,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const geminiKey = Deno.env.get("GEMINI_API_KEY");
 
-  if (!supabaseUrl || !anonKey) {
-    return jsonResponse({ error: "Servidor não configurado." }, 500);
-  }
-
   if (!geminiKey) {
     return jsonResponse(
       { error: "GEMINI_API_KEY não configurada. Defina o secret no Supabase." },
@@ -56,23 +52,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-
-  if (!authHeader) {
-    return jsonResponse({ error: "Não autenticado." }, 401);
-  }
-
-  const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !userData?.user) {
-    return jsonResponse({ error: "Sessão inválida." }, 401);
-  }
-
-  let payload: { conversationId?: string; content?: string; retry?: boolean };
+  let payload: {
+    conversationId?: string;
+    content?: string;
+    retry?: boolean;
+    guest?: boolean;
+    history?: Array<{ role?: string; content?: string }>;
+  };
 
   try {
     payload = await req.json();
@@ -80,13 +66,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: "JSON inválido." }, 400);
   }
 
-  const conversationId = (payload.conversationId ?? "").trim();
+  if (!payload || typeof payload !== "object") {
+    return jsonResponse({ error: "JSON inválido." }, 400);
+  }
+
+  const isGuest = payload.guest === true;
   const content = (payload.content ?? "").trim();
   const isRetry = payload.retry === true;
-
-  if (!conversationId) {
-    return jsonResponse({ error: "conversationId é obrigatório." }, 400);
-  }
 
   if (!content) {
     return jsonResponse({ error: "Mensagem vazia." }, 400);
@@ -96,37 +82,83 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: `Mensagem muito longa (máx. ${MAX_INPUT_CHARS} caracteres).` }, 400);
   }
 
-  const { data: conversation, error: conversationError } = await supabase
-    .from("conversations")
-    .select("id, title")
-    .eq("id", conversationId)
-    .maybeSingle();
+  let supabase: ReturnType<typeof createClient> | null = null;
+  let conversationId = "";
+  let history: Array<{ role: string; content: string }> = [];
+  let skipUserInsert = false;
 
-  if (conversationError || !conversation) {
-    return jsonResponse({ error: "Conversa não encontrada." }, 404);
-  }
+  if (isGuest) {
+    const historico = Array.isArray(payload.history) ? payload.history : [];
+    history = historico
+      .filter((message) =>
+        message
+        && (message.role === "user" || message.role === "assistant")
+        && typeof message.content === "string"
+      )
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map((message) => ({
+        role: message.role as string,
+        content: message.content as string,
+      }));
+  } else {
+    if (!supabaseUrl || !anonKey) {
+      return jsonResponse({ error: "Servidor não configurado." }, 500);
+    }
 
-  const { data: historyDesc } = await supabase
-    .from("messages")
-    .select("role, content, created_at")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: false })
-    .limit(MAX_HISTORY_MESSAGES);
+    const authHeader = req.headers.get("Authorization") ?? "";
 
-  const history = (historyDesc ?? []).slice().reverse();
-  const lastMessage = history[history.length - 1];
-  const skipUserInsert =
-    isRetry && lastMessage?.role === "user" && lastMessage.content === content;
+    if (!authHeader) {
+      return jsonResponse({ error: "Não autenticado." }, 401);
+    }
 
-  if (!skipUserInsert) {
-    const { error: insertUserError } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      role: "user",
-      content,
+    const db = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
     });
+    supabase = db;
 
-    if (insertUserError) {
-      return jsonResponse({ error: "Não foi possível salvar a mensagem." }, 500);
+    const { data: userData, error: userError } = await db.auth.getUser();
+
+    if (userError || !userData?.user) {
+      return jsonResponse({ error: "Sessão inválida." }, 401);
+    }
+
+    conversationId = (payload.conversationId ?? "").trim();
+
+    if (!conversationId) {
+      return jsonResponse({ error: "conversationId é obrigatório." }, 400);
+    }
+
+    const { data: conversation, error: conversationError } = await db
+      .from("conversations")
+      .select("id, title")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (conversationError || !conversation) {
+      return jsonResponse({ error: "Conversa não encontrada." }, 404);
+    }
+
+    const { data: historyDesc } = await db
+      .from("messages")
+      .select("role, content, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(MAX_HISTORY_MESSAGES);
+
+    history = (historyDesc ?? []).slice().reverse();
+    const lastMessage = history[history.length - 1];
+    skipUserInsert = isRetry && lastMessage?.role === "user" && lastMessage.content === content;
+
+    if (!skipUserInsert) {
+      const { error: insertUserError } = await db.from("messages").insert({
+        conversation_id: conversationId,
+        role: "user",
+        content,
+      });
+
+      if (insertUserError) {
+        return jsonResponse({ error: "Não foi possível salvar a mensagem." }, 500);
+      }
     }
   }
 
@@ -135,7 +167,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     parts: [{ text: message.content }],
   }));
 
-  if (!skipUserInsert) {
+  if (isGuest || !skipUserInsert) {
     contents.push({ role: "user", parts: [{ text: content }] });
   }
 
@@ -290,7 +322,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           }
         }
 
-        if (fullText.trim().length > 0) {
+        if (!isGuest && supabase && fullText.trim().length > 0) {
           const { error: insertAssistantError } = await supabase.from("messages").insert({
             conversation_id: conversationId,
             role: "assistant",

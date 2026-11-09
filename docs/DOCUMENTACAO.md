@@ -2,22 +2,24 @@
 
 ## 1. Visão geral
 
-O OrganizaAi é uma aplicação web estática com autenticação Google e persistência
-no Supabase. Ele oferece dois módulos:
+O OrganizaAi é uma aplicação web estática com dois módulos:
 
-- **OrganizaAi**: lista de tarefas privada por usuário.
+- **OrganizaAi**: lista de tarefas local no modo visitante ou privada por usuário no Supabase.
 - **EstudAI**: chat de estudos com histórico de conversas e respostas em streaming.
 
-O projeto não utiliza mais checklist, gestão de usuários, papéis, CPF ou
-auditoria. O login por e-mail/senha foi removido.
+O fluxo de autenticação Google continua no projeto, mas está desativado por
+padrão. No modo atual (visitante), tarefas e conversas ficam no `localStorage`
+do navegador. O projeto não utiliza mais checklist, gestão de usuários, papéis,
+CPF ou auditoria. O login por e-mail/senha foi removido.
 
 ## 2. Stack
 
 | Camada | Tecnologia |
 |---|---|
 | Frontend | HTML5, CSS3, JavaScript sem build |
-| Autenticação | Supabase Auth com Google OAuth |
-| Banco | PostgreSQL no Supabase |
+| Modo atual | Visitante local (`localStorage`) |
+| Autenticação | Supabase Auth com Google OAuth (desativada por flag) |
+| Banco | PostgreSQL no Supabase (modo autenticado) |
 | Backend de IA | Edge Function `chat` em Deno |
 | Modelo | Google Gemini |
 | Deploy | Vercel (estático) |
@@ -30,6 +32,7 @@ login.html
 assets/
   css/auth.css
   css/todolist.css
+  js/app-config.js
   js/auth.js
   js/login.js
   js/supabase-config.js
@@ -57,6 +60,18 @@ documentação operacional atual é este arquivo.
 
 ## 4. Autenticação
 
+### 4.0 Estado atual
+
+A flag fica em `assets/js/app-config.js`:
+
+```js
+window.ORGANIZAAI_AUTH_ENABLED = false;
+```
+
+- `false`: modo visitante local. Não há login; tarefas e conversas usam
+  `localStorage`; o chat chama a Edge Function com `guest: true`.
+- `true`: fluxo Google OAuth + Supabase descrito abaixo.
+
 ### 4.1 Fluxo
 
 1. O usuário acessa `index.html` ou `ia/index.html` sem sessão.
@@ -75,11 +90,15 @@ documentação operacional atual é este arquivo.
 
 ### 4.3 Arquivos
 
+- `assets/js/app-config.js`: liga/desliga a autenticação.
 - `login.html` e `assets/js/login.js`: entrada Google e retorno do OAuth.
 - `assets/js/auth.js`: sessão, perfil, sidebar, conta e logout.
-- `ia/index.html` e `ia/ia.js`: login e sessão do EstudAI.
+- `ia/index.html` e `ia/ia.js`: login/sessão ou modo visitante do EstudAI.
 
 ## 5. Modelo de dados
+
+No modo visitante, as tabelas abaixo não são usadas; os dados ficam no
+`localStorage`. Elas continuam necessárias para o modo autenticado.
 
 ### 5.1 `profiles`
 
@@ -176,16 +195,18 @@ Em bancos existentes, `0003` aplica a limpeza.
 ### 9.1 OrganizaAi
 
 - `index.html`: estrutura da lista.
-- `assets/js/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena tarefas.
+- `assets/js/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
+  tarefas. Usa `localStorage` no modo visitante ou Supabase no modo autenticado.
 - `assets/js/auth.js`: valida a sessão e monta sidebar/conta.
 - `assets/js/theme.js`: tema claro/escuro persistido em `localStorage`.
 
 ### 9.2 EstudAI
 
-- `ia/index.html`: login e interface do chat.
-- `ia/ia.js`: sessão, conversas, mensagens, streaming e Markdown sanitizado.
-- `supabase/functions/chat/index.ts`: valida a sessão, chama o Gemini e devolve
-  a resposta em streaming.
+- `ia/index.html`: login (modo auth) ou interface direta (modo visitante).
+- `ia/ia.js`: conversas locais ou Supabase, mensagens, streaming e Markdown
+  sanitizado.
+- `supabase/functions/chat/index.ts`: valida a sessão no modo autenticado ou
+  aceita `guest: true` sem banco; chama o Gemini e devolve streaming.
 
 ## 10. Execução local
 
@@ -193,8 +214,9 @@ Em bancos existentes, `0003` aplica a limpeza.
 npx serve .
 ```
 
-Abra `http://localhost:3000`. Para usar outra porta, inclua a URL nas Redirect
-URLs do Supabase.
+Abra `http://localhost:3000`. No modo visitante não é necessário configurar
+Redirect URLs. Para usar outra porta no modo autenticado, inclua a URL nas
+Redirect URLs do Supabase.
 
 Função de chat local:
 
@@ -204,15 +226,21 @@ npx supabase functions serve chat --env-file ./supabase/.env.local
 
 ## 11. Deploy
 
-1. Aplique as migrations com `npx supabase db push`.
-2. Publique a função com `npx supabase functions deploy chat`.
-3. Configure `GEMINI_API_KEY` nos secrets.
-4. Faça push para o GitHub; a Vercel publica os arquivos estáticos.
+No modo visitante, basta publicar o frontend e a função `chat` atualizada:
+
+1. Publique a função com `npx supabase functions deploy chat`.
+2. Configure `GEMINI_API_KEY` nos secrets.
+3. Faça push para o GitHub; a Vercel publica os arquivos estáticos.
+
+Ao reativar a autenticação, aplique também as migrations com
+`npx supabase db push` e configure o provider Google.
 
 ## 12. Segurança
 
 - Não coloque `GEMINI_API_KEY` no frontend.
 - Mantenha RLS habilitado em todas as tabelas.
+- No modo visitante, a função `chat` aceita chamadas sem JWT; use apenas para
+  uso local/pessoal. Ao reativar a auth, o fluxo autenticado volta a ser exigido.
 - Rotacione tokens e chaves expostos.
 - Revise as Redirect URLs ao trocar de domínio.
 - Não desative `is_ativo()` nas policies de dados.
@@ -225,17 +253,29 @@ npx supabase functions serve chat --env-file ./supabase/.env.local
 | `redirect_uri_mismatch` | URL não permitida | Revisar Redirect URLs |
 | Perfil não encontrado | Trigger ausente ou falhou | Conferir `0002_ai_chat.sql` |
 | Usuário desativado | `profiles.ativo = false` | Reativar no banco |
-| 401 no chat | Sessão expirada | Entrar novamente |
+| 401 no chat visitante | Função antiga sem `guest` | Publicar `chat` atualizada |
+| Tarefas/conversas somem | Outro navegador/origem | Usar o mesmo `localStorage` |
+| 401 no chat autenticado | Sessão expirada | Entrar novamente |
 | 502 no chat | Chave/cota do Gemini | Revisar secret e cota |
 
 ## 14. Checklist de validação
 
+Modo visitante (atual):
+
+- [ ] OrganizaAi abre direto, sem tela de login.
+- [ ] Tarefas persistem no `localStorage` após recarregar.
+- [ ] Sidebar mostra apenas OrganizaAi e EstudAI.
+- [ ] Tema claro/escuro funciona nas telas.
+- [ ] EstudAI abre direto e lista conversas locais.
+- [ ] Chat responde via função `chat` com `guest: true`.
+- [ ] Conversas locais persistem no `localStorage`.
+
+Modo autenticado (quando reativado):
+
 - [ ] `login.html` abre sem sessão e mostra apenas o botão Google.
 - [ ] Login Google cria/recupera o perfil.
 - [ ] Usuário inativo é bloqueado.
-- [ ] OrganizaAi carrega e persiste tarefas do usuário.
-- [ ] Sidebar mostra apenas OrganizaAi e EstudAI.
-- [ ] Tema claro/escuro funciona nas três telas.
-- [ ] EstudAI lista conversas e envia mensagens.
+- [ ] OrganizaAi carrega e persiste tarefas do usuário no Supabase.
+- [ ] EstudAI lista conversas e envia mensagens autenticadas.
 - [ ] Logout encerra a sessão.
 - [ ] RLS impede acesso a dados de outro usuário.

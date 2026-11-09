@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { marked } from "https://esm.sh/marked@12.0.2";
 import DOMPurify from "https://esm.sh/dompurify@3.1.6";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, CHAT_FUNCTION } from "./config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, CHAT_FUNCTION, AUTH_ENABLED } from "./config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -12,6 +12,7 @@ const el = {
   chatApp: document.getElementById("chatApp"),
   googleBtn: document.getElementById("googleBtn"),
   loginMessage: document.getElementById("loginMessage"),
+  loginThemeSlot: document.getElementById("loginThemeSlot"),
   sidebar: document.getElementById("sidebar"),
   sidebarToggle: document.getElementById("sidebarToggle"),
   sidebarBackdrop: document.getElementById("sidebarBackdrop"),
@@ -23,6 +24,9 @@ const el = {
   messageInput: document.getElementById("messageInput"),
   sendBtn: document.getElementById("sendBtn"),
   chatTitle: document.getElementById("chatTitle"),
+  themeSlot: document.getElementById("themeSlot"),
+  userAvatar: document.getElementById("userAvatar"),
+  userName: document.getElementById("userName"),
   userEmail: document.getElementById("userEmail"),
   logoutBtn: document.getElementById("logoutBtn"),
 };
@@ -33,6 +37,90 @@ const state = {
   currentId: null,
   sending: false,
 };
+
+const CHAVE_CONVERSAS_VISITANTE = "organizaai.estudai.visitante.v1";
+
+function gerarIdLocal() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
+function iniciaisConta(email) {
+  const nome = String(email || "EA").split("@")[0].replace(/[._-]+/g, " ").trim();
+  const partes = nome.split(/\s+/).filter(Boolean);
+
+  if (!partes.length) {
+    return "EA";
+  }
+
+  if (partes.length === 1) {
+    return partes[0].slice(0, 2).toUpperCase();
+  }
+
+  return (partes[0].charAt(0) + partes[partes.length - 1].charAt(0)).toUpperCase();
+}
+
+function lerConversasLocais() {
+  try {
+    const bruto = window.localStorage.getItem(CHAVE_CONVERSAS_VISITANTE);
+    if (!bruto) {
+      return [];
+    }
+
+    const dados = JSON.parse(bruto);
+    if (!Array.isArray(dados)) {
+      return [];
+    }
+
+    return dados
+      .filter((conversa) => conversa && typeof conversa.id === "string")
+      .map((conversa) => ({
+        id: conversa.id,
+        title: typeof conversa.title === "string" && conversa.title ? conversa.title : "Nova conversa",
+        updated_at: typeof conversa.updated_at === "string"
+          ? conversa.updated_at
+          : new Date().toISOString(),
+        messages: Array.isArray(conversa.messages)
+          ? conversa.messages
+            .filter((mensagem) => mensagem
+              && (mensagem.role === "user" || mensagem.role === "assistant")
+              && typeof mensagem.content === "string")
+            .map((mensagem) => ({
+              role: mensagem.role,
+              content: mensagem.content,
+              created_at: typeof mensagem.created_at === "string"
+                ? mensagem.created_at
+                : new Date().toISOString(),
+            }))
+          : [],
+      }));
+  } catch (erro) {
+    console.error("Não foi possível ler as conversas locais.", erro);
+    return [];
+  }
+}
+
+function salvarConversasLocais() {
+  try {
+    window.localStorage.setItem(CHAVE_CONVERSAS_VISITANTE, JSON.stringify(state.conversations));
+  } catch (erro) {
+    console.error("Não foi possível salvar as conversas locais.", erro);
+  }
+}
+
+function salvarMensagemLocal(conversationId, role, content) {
+  const conversa = state.conversations.find((item) => item.id === conversationId);
+  if (!conversa) {
+    return;
+  }
+
+  const agora = new Date().toISOString();
+  conversa.messages.push({ role, content, created_at: agora });
+  conversa.updated_at = agora;
+  salvarConversasLocais();
+}
 
 function renderMarkdown(text) {
   const html = marked.parse(text ?? "");
@@ -55,9 +143,13 @@ function autoGrow() {
   el.messageInput.style.height = Math.min(el.messageInput.scrollHeight, 160) + "px";
 }
 
+function atualizarBotaoEnviar() {
+  el.sendBtn.disabled = state.sending || el.messageInput.value.trim() === "";
+}
+
 function setSending(sending) {
   state.sending = sending;
-  el.sendBtn.disabled = sending;
+  atualizarBotaoEnviar();
   el.sendBtn.textContent = sending ? "..." : "Enviar";
   el.messages.setAttribute("aria-busy", sending ? "true" : "false");
 }
@@ -87,7 +179,27 @@ async function perfilAtivo(userId) {
   return data?.ativo === true;
 }
 
+async function applyGuestState() {
+  closeSidebar();
+  el.loginScreen.hidden = true;
+  el.chatApp.hidden = false;
+  el.userAvatar.textContent = "VI";
+  el.userName.textContent = "Visitante";
+  el.userEmail.textContent = "Dados salvos neste navegador";
+  el.logoutBtn.hidden = true;
+  await loadConversations();
+
+  if (window.matchMedia("(min-width: 821px)").matches) {
+    el.messageInput.focus();
+  }
+}
+
 async function initAuth() {
+  if (!AUTH_ENABLED) {
+    await applyGuestState();
+    return;
+  }
+
   const { data } = await supabase.auth.getSession();
   state.session = data.session ?? null;
   await applyAuthState();
@@ -112,9 +224,13 @@ async function applyAuthState() {
     }
 
     await registrarAcesso();
+    const email = state.session.user.email ?? "";
     el.loginScreen.hidden = true;
     el.chatApp.hidden = false;
-    el.userEmail.textContent = state.session.user.email ?? "";
+    el.userAvatar.textContent = iniciaisConta(email);
+    el.userName.textContent = email || "Conta";
+    el.userEmail.textContent = "Sessão ativa";
+    el.logoutBtn.hidden = false;
     loadConversations().then(() => {
       if (window.matchMedia("(min-width: 821px)").matches) {
         el.messageInput.focus();
@@ -170,6 +286,24 @@ function showLoginErrorFromUrl() {
 /* ---------------- Conversas ---------------- */
 
 async function loadConversations() {
+  if (!AUTH_ENABLED) {
+    state.conversations = lerConversasLocais();
+    renderConversations();
+
+    if (state.currentId && !state.conversations.some((c) => c.id === state.currentId)) {
+      state.currentId = null;
+    }
+
+    if (!state.currentId && state.conversations.length > 0) {
+      await selectConversation(state.conversations[0].id);
+    } else if (!state.conversations.length) {
+      state.currentId = null;
+      el.chatTitle.textContent = "EstudAI";
+      showEmptyState();
+    }
+    return;
+  }
+
   const { data, error } = await supabase
     .from("conversations")
     .select("id, title, updated_at")
@@ -220,6 +354,23 @@ function renderConversations() {
 }
 
 async function createConversation() {
+  if (!AUTH_ENABLED) {
+    const conversa = {
+      id: gerarIdLocal(),
+      title: "Nova conversa",
+      updated_at: new Date().toISOString(),
+      messages: [],
+    };
+
+    state.conversations.unshift(conversa);
+    state.currentId = conversa.id;
+    el.chatTitle.textContent = conversa.title;
+    salvarConversasLocais();
+    renderConversations();
+    showEmptyState();
+    return conversa.id;
+  }
+
   if (!state.session) {
     return null;
   }
@@ -249,6 +400,11 @@ async function selectConversation(id) {
   el.chatTitle.textContent = conversation?.title ?? "Conversa";
   renderConversations();
 
+  if (!AUTH_ENABLED) {
+    renderMessages(conversation?.messages ?? []);
+    return;
+  }
+
   const { data, error } = await supabase
     .from("messages")
     .select("id, role, content, created_at")
@@ -270,6 +426,16 @@ async function refreshTitleIfNeeded(conversationId, firstText) {
   }
 
   const title = firstText.replace(/\s+/g, " ").trim().slice(0, 60) || "Nova conversa";
+
+  if (!AUTH_ENABLED) {
+    conversation.title = title;
+    conversation.updated_at = new Date().toISOString();
+    salvarConversasLocais();
+    el.chatTitle.textContent = title;
+    renderConversations();
+    return;
+  }
+
   const { error } = await supabase
     .from("conversations")
     .update({ title })
@@ -389,6 +555,10 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
       typingRow.remove();
     }
 
+    if (!AUTH_ENABLED && accumulated.trim()) {
+      salvarMensagemLocal(conversationId, "assistant", accumulated);
+    }
+
     if (!accumulated.trim()) {
       if (assistantBubble) {
         assistantBubble.closest(".msg")?.remove();
@@ -407,6 +577,11 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
     }
 
     if (error && error.status === 401) {
+      if (!AUTH_ENABLED) {
+        appendError("IA indisponível no modo visitante. Publique a função chat.", null);
+        return;
+      }
+
       await handleSessionExpired();
       return;
     }
@@ -434,7 +609,7 @@ async function handleSessionExpired() {
 async function onSubmit(event) {
   event.preventDefault();
 
-  if (state.sending || !state.session) {
+  if (state.sending || (AUTH_ENABLED && !state.session)) {
     return;
   }
 
@@ -452,6 +627,10 @@ async function onSubmit(event) {
   }
 
   const isFirstMessage = el.messages.children.length === 0;
+
+  if (!AUTH_ENABLED) {
+    salvarMensagemLocal(conversationId, "user", text);
+  }
 
   el.messageInput.value = "";
   autoGrow();
@@ -472,14 +651,34 @@ async function onSubmit(event) {
 }
 
 async function streamReply(conversationId, content, onDelta, isRetry = false) {
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+  };
+  const body = { conversationId, content, retry: isRetry };
+
+  if (AUTH_ENABLED) {
+    headers.Authorization = `Bearer ${state.session.access_token}`;
+  } else {
+    const conversa = state.conversations.find((item) => item.id === conversationId);
+    const historico = (conversa?.messages ?? []).map((mensagem) => ({
+      role: mensagem.role,
+      content: mensagem.content,
+    }));
+    const ultima = historico[historico.length - 1];
+
+    if (ultima && ultima.role === "user" && ultima.content === content) {
+      historico.pop();
+    }
+
+    body.guest = true;
+    body.history = historico;
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/${CHAT_FUNCTION}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${state.session.access_token}`,
-      apikey: SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ conversationId, content, retry: isRetry }),
+    headers,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -550,7 +749,8 @@ function openSidebar() {
   el.sidebar.classList.add("is-open");
   el.sidebarBackdrop.hidden = false;
   el.sidebarToggle.setAttribute("aria-expanded", "true");
-  const firstItem = el.conversationsList.querySelector("button");
+  const firstItem = el.conversationsList.querySelector("button")
+    || el.sidebar.querySelector(".sidebar-system");
   if (firstItem) {
     firstItem.focus();
   }
@@ -568,6 +768,11 @@ function closeSidebar(returnFocus = false) {
 /* ---------------- Eventos ---------------- */
 
 function bindEvents() {
+  if (window.OrganizaTema) {
+    window.OrganizaTema.montarBotao(el.loginThemeSlot, "login-theme-toggle");
+    window.OrganizaTema.montarBotao(el.themeSlot, "sidebar-theme-toggle");
+  }
+
   el.googleBtn.addEventListener("click", signInWithGoogle);
   el.logoutBtn.addEventListener("click", () => supabase.auth.signOut());
   el.newConversationBtn.addEventListener("click", async () => {
@@ -578,7 +783,10 @@ function bindEvents() {
 
   el.composer.addEventListener("submit", onSubmit);
 
-  el.messageInput.addEventListener("input", autoGrow);
+  el.messageInput.addEventListener("input", () => {
+    autoGrow();
+    atualizarBotaoEnviar();
+  });
   el.messageInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -590,6 +798,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       el.messageInput.value = button.dataset.prompt ?? "";
       autoGrow();
+      atualizarBotaoEnviar();
       el.composer.requestSubmit();
     });
   });

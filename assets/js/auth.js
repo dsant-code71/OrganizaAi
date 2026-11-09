@@ -242,9 +242,10 @@
         }
     }
 
-    function renderUserMenu(profile) {
+    function renderUserMenu(profile, opcoes) {
         renderSidebar();
 
+        var visitante = !!(opcoes && opcoes.visitante);
         var container = document.getElementById('userMenu');
 
         if (!container) {
@@ -280,16 +281,18 @@
         chip.appendChild(info);
         container.appendChild(chip);
 
-        var sair = document.createElement('button');
-        sair.type = 'button';
-        sair.className = 'user-logout';
-        sair.textContent = 'Sair';
-        sair.addEventListener('click', function () {
-            sair.disabled = true;
-            sair.textContent = 'Saindo...';
-            void signOut();
-        });
-        container.appendChild(sair);
+        if (!visitante) {
+            var sair = document.createElement('button');
+            sair.type = 'button';
+            sair.className = 'user-logout';
+            sair.textContent = 'Sair';
+            sair.addEventListener('click', function () {
+                sair.disabled = true;
+                sair.textContent = 'Saindo...';
+                void signOut();
+            });
+            container.appendChild(sair);
+        }
     }
 
     window.OrganizaAuth = {
