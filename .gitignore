@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 node_modules/
 .env
 .env.*
@@ -6,3 +7,6 @@ supabase/.temp/
 supabase/.branches/
 .DS_Store
 Thumbs.db
+=======
+supabase/.temp/
+>>>>>>> 3f887e52452550a9ed61ecfe8351714c92dea1df

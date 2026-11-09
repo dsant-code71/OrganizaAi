@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<<<<<<< HEAD
     <title>OrganizAI · Lista de Tarefas</title>
     <script src="theme.js"></script>
     <link rel="stylesheet" href="todolist.css" />
@@ -34,9 +35,31 @@
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
+=======
+    <title>OrganizaAi · Lista de Tarefas</title>
+    <script src="assets/js/theme.js"></script>
+    <link rel="stylesheet" href="assets/css/todolist.css" />
+    <link rel="stylesheet" href="assets/css/auth.css" />
+  </head>
+  <body>
+    <div id="authLoading" class="auth-loading" role="status" aria-live="polite">Carregando...</div>
+
+    <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
+
+    <header class="brand" aria-label="OrganizaAi" hidden>
+      <a
+        class="brand-link"
+        href="ChecklistAi/index.html"
+        title="Ir para ChecklistAi"
+        aria-label="OrganizaAi — ir para ChecklistAi"
+      >
+        <div class="avatar-ring"><span>OA</span></div>
+        <h1>OrganizaAi</h1>
+      </a>
+>>>>>>> 3f887e52452550a9ed61ecfe8351714c92dea1df
     </header>
 
-    <main class="todo-container" aria-label="Lista de tarefas">
+    <main class="todo-container" aria-label="Lista de tarefas" hidden>
       <div class="modal-mark" aria-hidden="true">
         <div class="avatar-ring"><span>OA</span></div>
       </div>
@@ -48,15 +71,20 @@
           placeholder="No que você está trabalhando?"
           aria-label="Nova tarefa"
         />
-        <button id="addBtn" onclick="adicionarTarefa(), atualizarContador()">Adicionar</button>
+        <button id="addBtn" onclick="adicionarTarefa()">Adicionar</button>
       </div>
 
       <div id="count" aria-live="polite"></div>
+      <div id="statusTarefas" class="form-message" role="status" aria-live="polite"></div>
       <div id="divFiltros"></div>
       <ul id="listaTarefas"></ul>
       <div id="divLimpar"></div>
     </main>
 
-    <script src="todolist.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@1.67.0/dist/umd/lucide.min.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/todolist.js"></script>
   </body>
 </html>
