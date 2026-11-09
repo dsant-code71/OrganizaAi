@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChecklistAi · Checklist diário de máquinas</title>
     <link rel="stylesheet" href="checklist.css" />
+<<<<<<< HEAD
     <link rel="stylesheet" href="../shared/auth.css" />
     <script src="../shared/config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -16,6 +17,8 @@
       data-fallback="../index.html"
     ></script>
     <script src="../shared/auth-ui.js" data-base="../"></script>
+=======
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
   </head>
   <body>
     <header class="brand" aria-label="ChecklistAi">
@@ -30,8 +33,11 @@
       </a>
     </header>
 
+<<<<<<< HEAD
     <div id="headerActions" class="header-actions"></div>
 
+=======
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     <button
       type="button"
       id="menuToggle"
@@ -88,9 +94,13 @@
       <div id="setupEmpty" class="empty-state setup-empty" hidden>
         <h3>Cadastre as máquinas da empresa</h3>
         <p>Adicione os códigos internos para gerar automaticamente o checklist de cada dia.</p>
+<<<<<<< HEAD
         <button type="button" id="openMachinesBtn" class="btn-primary" data-perm="maquinas.gerir">
           Abrir cadastro de máquinas
         </button>
+=======
+        <button type="button" id="openMachinesBtn" class="btn-primary">Abrir cadastro de máquinas</button>
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
       </div>
 
       <div id="dayEmpty" class="empty-state" hidden>
@@ -198,7 +208,11 @@
           O cadastro vale para todos os dias e é clonado automaticamente para o início e o fim de cada dia.
         </p>
 
+<<<<<<< HEAD
         <form id="machineForm" novalidate data-perm="maquinas.gerir">
+=======
+        <form id="machineForm" novalidate>
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
           <label class="field-label" for="machineCode">Código da máquina</label>
           <div class="machine-form-row">
             <input

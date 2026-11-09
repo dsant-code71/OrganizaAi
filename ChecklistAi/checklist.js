@@ -1,4 +1,10 @@
+<<<<<<< HEAD
 var todasMaquinas = [];
+=======
+var STORAGE_MAQUINAS = 'maquinasChecklist';
+var STORAGE_DIAS = 'diasChecklist';
+
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
 var maquinas = [];
 var dias = {};
 var dataSelecionada = '';
@@ -218,6 +224,7 @@ function normalizarDia(bruto, dataISO) {
     };
 }
 
+<<<<<<< HEAD
 async function lerMaquinas() {
     var resposta = await window.sb
         .from('machines')
@@ -378,6 +385,87 @@ async function salvarDias() {
             }
         }
 
+=======
+function lerMaquinas() {
+    try {
+        var salvos = JSON.parse(localStorage.getItem(STORAGE_MAQUINAS) || '[]');
+
+        if (!Array.isArray(salvos)) {
+            return [];
+        }
+
+        var idsUsados = new Set();
+        var codigosUsados = new Set();
+        var lista = [];
+
+        salvos.forEach(function (bruto) {
+            var maquina = normalizarMaquina(bruto, idsUsados);
+
+            if (!maquina) {
+                return;
+            }
+
+            var chave = maquina.codigo.toLowerCase();
+
+            if (codigosUsados.has(chave)) {
+                return;
+            }
+
+            codigosUsados.add(chave);
+            lista.push(maquina);
+        });
+
+        lista.sort(compararCodigos);
+        return lista;
+    } catch (erro) {
+        console.warn('Não foi possível ler as máquinas cadastradas.', erro);
+        return [];
+    }
+}
+
+function lerDias() {
+    try {
+        var bruto = JSON.parse(localStorage.getItem(STORAGE_DIAS) || '{}');
+
+        if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) {
+            return {};
+        }
+
+        var resultado = {};
+
+        Object.keys(bruto).forEach(function (dataISO) {
+            if (!dataValidaISO(dataISO)) {
+                return;
+            }
+
+            var dia = normalizarDia(bruto[dataISO], dataISO);
+
+            if (dia) {
+                resultado[dataISO] = dia;
+            }
+        });
+
+        return resultado;
+    } catch (erro) {
+        console.warn('Não foi possível ler os checklists salvos.', erro);
+        return {};
+    }
+}
+
+function salvarMaquinas() {
+    try {
+        localStorage.setItem(STORAGE_MAQUINAS, JSON.stringify(maquinas));
+        return true;
+    } catch (erro) {
+        console.warn('Não foi possível salvar as máquinas.', erro);
+        return false;
+    }
+}
+
+function salvarDias() {
+    try {
+        localStorage.setItem(STORAGE_DIAS, JSON.stringify(dias));
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         return true;
     } catch (erro) {
         console.warn('Não foi possível salvar os checklists.', erro);
@@ -404,14 +492,22 @@ function agendarSalvamento() {
     }, 250);
 }
 
+<<<<<<< HEAD
 async function salvarDiasAgora() {
+=======
+function salvarDiasAgora() {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     if (salvarTimer) {
         window.clearTimeout(salvarTimer);
         salvarTimer = null;
     }
 
+<<<<<<< HEAD
     definirStatusSalvamento('Salvando...', 'salvando');
     var salvou = await salvarDias();
+=======
+    var salvou = salvarDias();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
 
     if (salvou) {
         definirStatusSalvamento('Salvo às ' + formatarHora(Date.now()), 'salvo');
@@ -602,6 +698,7 @@ function renderizarMaquinas() {
         codigo.className = 'manage-code';
         codigo.textContent = maquina.codigo;
 
+<<<<<<< HEAD
         item.appendChild(codigo);
 
         if (Auth.pode('maquinas.gerir')) {
@@ -632,6 +729,34 @@ function renderizarMaquinas() {
             item.appendChild(acoes);
         }
 
+=======
+        var acoes = document.createElement('div');
+        acoes.className = 'manage-actions';
+
+        var editar = document.createElement('button');
+        editar.type = 'button';
+        editar.className = 'btn-small';
+        editar.textContent = 'Editar';
+        editar.setAttribute('aria-label', 'Editar a máquina ' + maquina.codigo);
+        editar.addEventListener('click', function () {
+            iniciarEdicaoMaquina(maquina.id);
+        });
+
+        var excluir = document.createElement('button');
+        excluir.type = 'button';
+        excluir.className = 'icon-btn';
+        excluir.textContent = '×';
+        excluir.title = 'Excluir máquina';
+        excluir.setAttribute('aria-label', 'Excluir a máquina ' + maquina.codigo);
+        excluir.addEventListener('click', function () {
+            excluirMaquina(maquina.id);
+        });
+
+        acoes.appendChild(editar);
+        acoes.appendChild(excluir);
+        item.appendChild(codigo);
+        item.appendChild(acoes);
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         fragmento.appendChild(item);
     });
 
@@ -673,6 +798,7 @@ function cancelarEdicaoMaquina() {
     machineCode.focus();
 }
 
+<<<<<<< HEAD
 async function enviarMaquina(evento) {
     evento.preventDefault();
 
@@ -681,6 +807,11 @@ async function enviarMaquina(evento) {
         return;
     }
 
+=======
+function enviarMaquina(evento) {
+    evento.preventDefault();
+
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     var codigo = machineCode.value.trim();
 
     if (codigo === '') {
@@ -690,18 +821,27 @@ async function enviarMaquina(evento) {
         return;
     }
 
+<<<<<<< HEAD
     var existente = todasMaquinas.find(function (maquina) {
+=======
+    var duplicada = maquinas.some(function (maquina) {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         return maquina.id !== maquinaEmEdicaoId &&
             maquina.codigo.toLowerCase() === codigo.toLowerCase();
     });
 
+<<<<<<< HEAD
     if (existente && (maquinaEmEdicaoId !== null || existente.ativo)) {
+=======
+    if (duplicada) {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         machineCode.setAttribute('aria-invalid', 'true');
         machineCode.focus();
         mostrarMensagemMaquina('Esse código já está cadastrado.', 'erro');
         return;
     }
 
+<<<<<<< HEAD
     var perfil = Auth.usuarioAtual();
 
     if (!perfil) {
@@ -761,6 +901,54 @@ async function excluirMaquina(id) {
         return;
     }
 
+=======
+    var editando = maquinaEmEdicaoId !== null;
+    var mensagem = 'Máquina adicionada.';
+    var salvouMaquinas;
+
+    if (editando) {
+        var maquina = maquinas.find(function (item) {
+            return item.id === maquinaEmEdicaoId;
+        });
+
+        if (!maquina) {
+            resetarFormularioMaquina();
+            renderizarMaquinas();
+            return;
+        }
+
+        maquina.codigo = codigo;
+        mensagem = 'Código atualizado.';
+    } else {
+        maquinas.push({
+            id: gerarId(),
+            codigo: codigo,
+            criadoEm: Date.now()
+        });
+    }
+
+    maquinas.sort(compararCodigos);
+    salvouMaquinas = salvarMaquinas();
+
+    if (sincronizarDiaHoje()) {
+        salvarDiasAgora();
+    }
+
+    resetarFormularioMaquina();
+    renderizarMaquinas();
+    renderizarDia();
+
+    if (salvouMaquinas) {
+        mostrarMensagemMaquina(mensagem, 'sucesso');
+    } else {
+        mostrarMensagemMaquina('Alteração feita, mas não foi possível salvar no navegador.', 'erro');
+    }
+
+    machineCode.focus();
+}
+
+function excluirMaquina(id) {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     var maquina = maquinas.find(function (item) {
         return item.id === id;
     });
@@ -773,6 +961,7 @@ async function excluirMaquina(id) {
         return;
     }
 
+<<<<<<< HEAD
     try {
         var resposta = await window.sb
             .from('machines')
@@ -795,6 +984,29 @@ async function excluirMaquina(id) {
     } catch (erro) {
         console.warn('Não foi possível excluir a máquina.', erro);
         mostrarMensagemMaquina(erro.message || 'Não foi possível excluir a máquina.', 'erro');
+=======
+    maquinas = maquinas.filter(function (item) {
+        return item.id !== id;
+    });
+
+    var salvouMaquinas = salvarMaquinas();
+
+    if (sincronizarDiaHoje()) {
+        salvarDiasAgora();
+    }
+
+    if (maquinaEmEdicaoId === id) {
+        resetarFormularioMaquina();
+    }
+
+    renderizarMaquinas();
+    renderizarDia();
+
+    if (salvouMaquinas) {
+        mostrarMensagemMaquina('Máquina excluída. O histórico anterior foi mantido.', 'sucesso');
+    } else {
+        mostrarMensagemMaquina('Máquina excluída, mas não foi possível salvar no navegador.', 'erro');
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     }
 }
 
@@ -1052,7 +1264,11 @@ function selecionarFase(fase) {
     renderizarLista(dia);
 }
 
+<<<<<<< HEAD
 async function mudarData(novaData) {
+=======
+function mudarData(novaData) {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     if (!dataValidaISO(novaData)) {
         return;
     }
@@ -1064,14 +1280,22 @@ async function mudarData(novaData) {
     }
 
     if (salvarTimer) {
+<<<<<<< HEAD
         await salvarDiasAgora();
+=======
+        salvarDiasAgora();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     }
 
     dataSelecionada = novaData;
     machineSearch.value = '';
 
     if (dataSelecionada === hoje && sincronizarDiaHoje()) {
+<<<<<<< HEAD
         await salvarDiasAgora();
+=======
+        salvarDiasAgora();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     }
 
     renderizarDia();
@@ -1282,6 +1506,7 @@ function tratarTecladoAbas(evento) {
     }
 }
 
+<<<<<<< HEAD
 function configurarPermissoes() {
     if (Auth.pode('maquinas.gerir')) {
         return;
@@ -1309,6 +1534,9 @@ function configurarPermissoes() {
 }
 
 async function iniciar() {
+=======
+function iniciar() {
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     menuToggle = document.getElementById('menuToggle');
     menuBadge = document.getElementById('menuBadge');
     machinesMenu = document.getElementById('machinesMenu');
@@ -1360,6 +1588,11 @@ async function iniciar() {
     exportEnd = document.getElementById('exportEnd');
     exportMessage = document.getElementById('exportMessage');
 
+<<<<<<< HEAD
+=======
+    maquinas = lerMaquinas();
+    dias = lerDias();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     dataSelecionada = hojeISO();
 
     var hoje = hojeISO();
@@ -1369,6 +1602,7 @@ async function iniciar() {
     exportEnd.value = hoje;
     exportStart.value = somarDias(hoje, -6);
 
+<<<<<<< HEAD
     var carregou = true;
 
     try {
@@ -1386,6 +1620,10 @@ async function iniciar() {
 
     if (carregou && sincronizarDiaHoje()) {
         await salvarDiasAgora();
+=======
+    if (sincronizarDiaHoje()) {
+        salvarDias();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
     }
 
     renderizarMaquinas();
@@ -1493,17 +1731,26 @@ async function iniciar() {
 
     window.addEventListener('beforeunload', function () {
         if (salvarTimer) {
+<<<<<<< HEAD
             salvarDiasAgora();
+=======
+            salvarDias();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         }
     });
 
     document.addEventListener('visibilitychange', function () {
         if (document.hidden && salvarTimer) {
+<<<<<<< HEAD
             salvarDiasAgora();
+=======
+            salvarDias();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
         }
     });
 }
 
+<<<<<<< HEAD
 document.addEventListener('DOMContentLoaded', function () {
     var pronto = window.AUTH_READY || Auth.proteger({
         login: '../login.html',
@@ -1516,3 +1763,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+=======
+iniciar();
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9

@@ -1254,6 +1254,7 @@ input[aria-invalid="true"] {
     }
 }
 
+<<<<<<< HEAD
 body .header-actions {
     top: 84px;
 }
@@ -1265,6 +1266,8 @@ body .header-actions {
     }
 }
 
+=======
+>>>>>>> 837aa10c13fa55f709fbe9ffeaa1e10c123467f9
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
