@@ -1,8 +1,8 @@
-# OrganizaAi + EstudAI
+# OrganizAI + EstudAI
 
 Aplicação web estática com dois módulos:
 
-- **OrganizaAi**: lista de tarefas local no modo visitante ou por usuário no Supabase.
+- **OrganizAI**: lista de tarefas local no modo visitante ou por usuário no Supabase.
 - **EstudAI**: assistente de estudos com IA.
 
 O fluxo de **Google OAuth** via Supabase Auth continua no projeto, mas está
@@ -20,7 +20,7 @@ window.ORGANIZAAI_AUTH_ENABLED = false;
 
 Com `false`:
 
-- OrganizaAi abre direto, sem tela de login.
+- OrganizAI abre direto, sem tela de login.
 - Tarefas ficam em `organizaai.tarefas.visitante.v1` no `localStorage`.
 - EstudAI abre direto e as conversas ficam em
   `organizaai.estudai.visitante.v1` no `localStorage`.
@@ -45,7 +45,7 @@ Navegador (index.html, login.html, ia/)
 ## Estrutura
 
 ```
-index.html                         OrganizaAi — lista de tarefas
+index.html                         OrganizAI — lista de tarefas
 login.html                         Entrada com Google
 assets/
   css/auth.css                     Login, sidebar, conta e tema
@@ -151,7 +151,7 @@ O site é estático e publicado pela Vercel a partir do GitHub
   escreve o guia em Markdown e anexa ao final um bloco ```plano com JSON
   (`{"versao":1,"tarefas":[{"titulo","prioridade"}]}`). O EstudAI renderiza
   esse bloco como um card interativo (tópicos, prioridades e seleção) que
-  cria as tarefas na lista do OrganizaAi — direto no `tasks` via Supabase no
+  cria as tarefas na lista do OrganizAI — direto no `tasks` via Supabase no
   modo autenticado, ou na mesma chave de `localStorage` do modo visitante.
 - A cadeia é configurável:
 

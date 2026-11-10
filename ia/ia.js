@@ -142,7 +142,7 @@ function renderMarkdown(text) {
   return template.innerHTML;
 }
 
-/* ---------------- Plano de estudos → tarefas OrganizaAi ---------------- */
+/* ---------------- Plano de estudos → tarefas OrganizAI ---------------- */
 
 // Mesma chave usada por assets/js/todolist.js (organizaai.tarefas.visitante.v1).
 // Alterou aqui? Altere lá também.

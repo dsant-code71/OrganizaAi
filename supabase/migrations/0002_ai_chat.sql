@@ -1,5 +1,5 @@
 -- =====================================================================
--- OrganizaAi · Assistente de estudos (IA)
+-- OrganizAI · Assistente de estudos (IA)
 -- Adiciona: onboarding de novos usuários (Google OAuth) + conversas/mensagens
 -- Reaproveita: public.profiles, public.is_ativo(), public.set_updated_at()
 -- =====================================================================

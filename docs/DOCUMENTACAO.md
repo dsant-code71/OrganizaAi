@@ -1,10 +1,10 @@
-# OrganizaAi — Documentação Técnica
+# OrganizAI — Documentação Técnica
 
 ## 1. Visão geral
 
-O OrganizaAi é uma aplicação web estática com dois módulos:
+O OrganizAI é uma aplicação web estática com dois módulos:
 
-- **OrganizaAi**: lista de tarefas local no modo visitante ou privada por usuário no Supabase.
+- **OrganizAI**: lista de tarefas local no modo visitante ou privada por usuário no Supabase.
 - **EstudAI**: chat de estudos com histórico de conversas e respostas em streaming.
 
 O fluxo de autenticação Google continua no projeto, mas está desativado por
@@ -192,7 +192,7 @@ Em bancos existentes, `0003` aplica a limpeza.
 
 ## 9. Frontend
 
-### 9.1 OrganizaAi
+### 9.1 OrganizAI
 
 - `index.html`: estrutura da lista.
 - `assets/js/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
@@ -222,11 +222,11 @@ Em bancos existentes, `0003` aplica a limpeza.
   `AI_CONTINUATION_DEADLINE_MS` (padrão `120000`). O legado
   `AI_MAX_OUTPUT_TOKENS` ainda é respeitado como fallback de
   `AI_SEGMENT_MAX_TOKENS`.
-- Integração EstudAI → OrganizaAi: pedidos de guia/plano/cronograma de
+- Integração EstudAI → OrganizAI: pedidos de guia/plano/cronograma de
   estudos fazem a IA anexar um bloco ```plano com JSON de tópicos. O
   `ia/ia.js` extrai o bloco (`extrairPlanos`), renderiza um card interativo
   (checkbox por tópico, prioridade alta/média/baixa/nenhuma) e cria as
-  tarefas na lista do OrganizaAi: insert na tabela `tasks` (modo
+  tarefas na lista do OrganizAI: insert na tabela `tasks` (modo
   autenticado) ou escrita na chave `organizaai.tarefas.visitante.v1` do
   `localStorage` (modo visitante — a mesma chave usada por
   `assets/js/todolist.js`). O JSON do bloco nunca é exibido no chat: JSON
@@ -292,9 +292,9 @@ Ao reativar a autenticação, aplique também as migrations com
 
 Modo visitante (atual):
 
-- [ ] OrganizaAi abre direto, sem tela de login.
+- [ ] OrganizAI abre direto, sem tela de login.
 - [ ] Tarefas persistem no `localStorage` após recarregar.
-- [ ] Sidebar mostra apenas OrganizaAi e EstudAI.
+- [ ] Sidebar mostra apenas OrganizAI e EstudAI.
 - [ ] Tema claro/escuro funciona nas telas.
 - [ ] EstudAI abre direto e lista conversas locais.
 - [ ] Chat responde via função `chat` com `guest: true`.
@@ -305,7 +305,7 @@ Modo autenticado (quando reativado):
 - [ ] `login.html` abre sem sessão e mostra apenas o botão Google.
 - [ ] Login Google cria/recupera o perfil.
 - [ ] Usuário inativo é bloqueado.
-- [ ] OrganizaAi carrega e persiste tarefas do usuário no Supabase.
+- [ ] OrganizAI carrega e persiste tarefas do usuário no Supabase.
 - [ ] EstudAI lista conversas e envia mensagens autenticadas.
 - [ ] Logout encerra a sessão.
 - [ ] RLS impede acesso a dados de outro usuário.
