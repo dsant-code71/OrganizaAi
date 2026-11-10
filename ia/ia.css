@@ -668,7 +668,14 @@ body {
     line-height: 1.4;
     outline: none;
     resize: none;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.composer textarea::-webkit-scrollbar {
+    display: none;
+    width: 0;
 }
 
 .composer textarea:focus {
