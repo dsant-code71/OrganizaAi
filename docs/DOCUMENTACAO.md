@@ -209,7 +209,19 @@ Em bancos existentes, `0003` aplica a limpeza.
   aceita `guest: true` sem banco; percorre a cadeia de IA (Groq, Gemini e
   OpenRouter), tenta o próximo provedor em `429`/`5xx`/timeout e devolve
   streaming. O histórico é limitado por caracteres e a saída por
-  `AI_MAX_OUTPUT_TOKENS` para conter o consumo de tokens.
+  `AI_SEGMENT_MAX_TOKENS` para conter o consumo de tokens.
+- Respostas longas são divididas em segmentos com continuação automática: a
+  função detecta o marcador `[[CONTINUE]]`, cortes por limite de tokens e o
+  limite suave por segmento, pausa em fronteira segura (fim de frase,
+  parágrafo, item de lista, linha de tabela ou bloco de código fechado) e
+  abre um novo segmento preservando a cauda pendente como prefixo. Os
+  eventos SSE `segment_start`, `delta`, `segment_end` (`continue`),
+  `truncated` e `[DONE]` guiam o frontend; cada segmento vira uma mensagem
+  `assistant` separada. Limites de segurança: `AI_TOTAL_OUTPUT_TOKENS`
+  (padrão `8192`), `AI_MAX_SEGMENTS` (padrão `8`) e
+  `AI_CONTINUATION_DEADLINE_MS` (padrão `120000`). O legado
+  `AI_MAX_OUTPUT_TOKENS` ainda é respeitado como fallback de
+  `AI_SEGMENT_MAX_TOKENS`.
 
 ## 10. Execução local
 

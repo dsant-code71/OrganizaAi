@@ -15,6 +15,11 @@ type Usage = {
   thoughtTokens?: number;
   totalTokens?: number;
 };
+type StreamState = { finishReason?: string };
+type Boundary = { index: number; fenceOpen: boolean };
+type OpenUpstreamResult =
+  | { ok: true; upstream: Response; candidate: Candidate }
+  | { ok: false; quotaExceeded: boolean; detail: string };
 
 const MAX_INPUT_CHARS = 4000;
 const MAX_HISTORY_MESSAGES = 20;
@@ -28,6 +33,8 @@ const SYSTEM_INSTRUCTION = [
   "Quando o aluno pedir ajuda com exercícios, guie o raciocínio passo a passo em vez de apenas dar a resposta.",
   "Use exemplos curtos, formatação em Markdown e seja encorajador.",
   "Se a pergunta fugir de estudos, responda brevemente e ofereça ajuda com os estudos.",
+  "Quando a resposta for longa, organize-a em partes coesas e termine cada parte em um ponto natural, como fim de parágrafo, item de lista, fim de frase ou bloco de código fechado.",
+  "Se ainda houver conteúdo para continuar, escreva exatamente [[CONTINUE]] na última linha da sua resposta, sem deixar tabelas ou blocos de código abertos. Caso a resposta esteja completa, não escreva o marcador.",
 ].join(" ");
 
 const VALID_PROVIDERS = new Set<Provider>(["gemini", "groq", "openrouter", "deepseek"]);
@@ -58,7 +65,20 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
   return Math.min(max, Math.max(min, parsed));
 }
 
-const MAX_OUTPUT_TOKENS = envInt("AI_MAX_OUTPUT_TOKENS", 1024, 256, 4096);
+const LEGACY_MAX_OUTPUT_TOKENS = Deno.env.get("AI_MAX_OUTPUT_TOKENS");
+const SEGMENT_MAX_OUTPUT_TOKENS = envInt(
+  "AI_SEGMENT_MAX_TOKENS",
+  LEGACY_MAX_OUTPUT_TOKENS ? Number.parseInt(LEGACY_MAX_OUTPUT_TOKENS, 10) || 1024 : 1024,
+  256,
+  4096,
+);
+const TOTAL_OUTPUT_TOKENS = envInt("AI_TOTAL_OUTPUT_TOKENS", 8192, SEGMENT_MAX_OUTPUT_TOKENS, 32768);
+const MAX_SEGMENTS = envInt("AI_MAX_SEGMENTS", 8, 1, 20);
+const CONTINUATION_MAX_MS = envInt("AI_CONTINUATION_DEADLINE_MS", 120000, 30000, 300000);
+const SEGMENT_SOFT_TOKEN_RATIO = 0.8;
+const CONTINUATION_MARKER = "[[CONTINUE]]";
+const CONTINUE_INSTRUCTION =
+  "Continue exatamente de onde a resposta anterior parou, sem repetir o conteúdo já escrito. Mantenha a mesma formatação em Markdown. Não escreva o marcador [[CONTINUE]] se a resposta estiver completa.";
 const MAX_HISTORY_CHARS = envInt("AI_HISTORY_MAX_CHARS", 6000, 1000, 20000);
 const GEMINI_THINKING_LEVEL = (Deno.env.get("GEMINI_THINKING_LEVEL") ?? "low").toLowerCase();
 const GROQ_REASONING_EFFORT_RAW = Deno.env.get("GROQ_REASONING_EFFORT")?.trim().toLowerCase();
@@ -164,6 +184,132 @@ function trimMessages(messages: ChatMessage[], maxChars: number): ChatMessage[] 
   return kept;
 }
 
+function isLengthFinish(reason?: string): boolean {
+  if (!reason) {
+    return false;
+  }
+
+  const normalized = reason.toLowerCase();
+  return normalized === "length" || normalized === "max_tokens" || normalized === "max tokens";
+}
+
+function approximateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+class ContinuationFilter {
+  private buffer = "";
+  markerFound = false;
+
+  push(chunk: string): string {
+    this.buffer += chunk;
+
+    if (this.buffer.includes(CONTINUATION_MARKER)) {
+      this.markerFound = true;
+    }
+
+    this.buffer = this.buffer.split(CONTINUATION_MARKER).join("");
+    const keep = CONTINUATION_MARKER.length - 1;
+
+    if (this.buffer.length <= keep) {
+      return "";
+    }
+
+    const text = this.buffer.slice(0, this.buffer.length - keep);
+    this.buffer = this.buffer.slice(-keep);
+    return text;
+  }
+
+  finish(): string {
+    if (this.buffer.includes(CONTINUATION_MARKER)) {
+      this.markerFound = true;
+    }
+
+    const text = this.buffer.split(CONTINUATION_MARKER).join("");
+    this.buffer = "";
+    return text;
+  }
+}
+
+function findLastSafeBoundary(text: string, initialFenceOpen: boolean): Boundary | null {
+  let fenceOpen = initialFenceOpen;
+  let last: Boundary | null = null;
+  let offset = 0;
+  const lines = text.split("\n");
+
+  for (const line of lines) {
+    const lineStart = offset;
+    const lineEnd = lineStart + line.length;
+    const trimmedStart = line.trimStart();
+    const isFence = trimmedStart.startsWith("```");
+
+    if (isFence) {
+      fenceOpen = !fenceOpen;
+      if (!fenceOpen && lineEnd > 0) {
+        last = { index: Math.min(text.length, lineEnd + 1), fenceOpen: false };
+      }
+    } else if (!fenceOpen) {
+      if (line.trim() === "") {
+        if (lineEnd > 0) {
+          last = { index: Math.min(text.length, lineEnd + 1), fenceOpen: false };
+        }
+      } else if (/^(#{1,6}\s|([-*+]|\d+[.)])\s|\|)/.test(trimmedStart)) {
+        if (lineStart > 0) {
+          last = { index: lineStart, fenceOpen: false };
+        }
+      } else {
+        const sentence = /[.!?…](?:["')\]]|\*|_)*(?=\s|$)/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = sentence.exec(line)) !== null) {
+          const index = lineStart + match.index + match[0].length;
+          if (index > 0) {
+            last = { index: Math.min(text.length, index), fenceOpen: false };
+          }
+        }
+      }
+    }
+
+    offset = lineEnd + 1;
+  }
+
+  return last;
+}
+
+class SafeBoundaryBuffer {
+  private pending = "";
+  private fenceOpen = false;
+
+  push(text: string): { emitted: string; boundary: boolean } {
+    if (!text) {
+      return { emitted: "", boundary: false };
+    }
+
+    this.pending += text;
+    const boundary = findLastSafeBoundary(this.pending, this.fenceOpen);
+
+    if (!boundary || boundary.index <= 0) {
+      return { emitted: "", boundary: false };
+    }
+
+    const emitted = this.pending.slice(0, boundary.index);
+    this.pending = this.pending.slice(boundary.index);
+    this.fenceOpen = boundary.fenceOpen;
+    return { emitted, boundary: true };
+  }
+
+  get pendingText(): string {
+    return this.pending;
+  }
+
+  takePending(): string {
+    const text = this.pending;
+    this.pending = "";
+    this.fenceOpen = false;
+    return text;
+  }
+}
+
 function buildGeminiContents(messages: ChatMessage[]) {
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
 
@@ -181,10 +327,13 @@ function buildGeminiContents(messages: ChatMessage[]) {
   return contents;
 }
 
-function buildGeminiRequest(messages: ChatMessage[]): string {
+function buildGeminiRequest(
+  messages: ChatMessage[],
+  maxTokens = SEGMENT_MAX_OUTPUT_TOKENS,
+): string {
   const generationConfig: Record<string, unknown> = {
     temperature: 0.7,
-    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    maxOutputTokens: maxTokens,
   };
 
   if (GEMINI_THINKING_LEVEL !== "none" && GEMINI_THINKING_LEVEL !== "off") {
@@ -218,7 +367,12 @@ function buildProviderMessages(
   return merged;
 }
 
-function buildOpenAIRequest(provider: Exclude<Provider, "gemini">, model: string, messages: ChatMessage[]): string {
+function buildOpenAIRequest(
+  provider: Exclude<Provider, "gemini">,
+  model: string,
+  messages: ChatMessage[],
+  maxTokens = SEGMENT_MAX_OUTPUT_TOKENS,
+): string {
   const body: Record<string, unknown> = {
     model,
     messages: buildProviderMessages(provider, messages),
@@ -227,7 +381,7 @@ function buildOpenAIRequest(provider: Exclude<Provider, "gemini">, model: string
   };
 
   if (provider === "groq") {
-    body.max_completion_tokens = MAX_OUTPUT_TOKENS;
+    body.max_completion_tokens = maxTokens;
 
     if (model.startsWith("openai/gpt-oss")) {
       body.reasoning_effort = GROQ_REASONING_EFFORT === "medium" || GROQ_REASONING_EFFORT === "high"
@@ -247,7 +401,7 @@ function buildOpenAIRequest(provider: Exclude<Provider, "gemini">, model: string
       }
     }
   } else {
-    body.max_tokens = MAX_OUTPUT_TOKENS;
+    body.max_tokens = maxTokens;
   }
 
   if (provider === "openrouter") {
@@ -306,6 +460,7 @@ function applyOpenAIUsage(meta: Record<string, unknown> | undefined, usage: Usag
 async function* streamGemini(
   body: ReadableStream<Uint8Array>,
   usage: Usage,
+  state: StreamState,
 ): AsyncGenerator<string> {
   const reader = body.getReader();
   const read = makeIdleReader(reader);
@@ -341,6 +496,11 @@ async function* streamGemini(
           const parsed = JSON.parse(data);
           applyGeminiUsage(parsed?.usageMetadata, usage);
 
+          const finishReason = parsed?.candidates?.[0]?.finishReason;
+          if (typeof finishReason === "string") {
+            state.finishReason = finishReason;
+          }
+
           const parts = parsed?.candidates?.[0]?.content?.parts ?? [];
           for (const part of parts) {
             if (typeof part?.text === "string" && part.text.length > 0) {
@@ -364,6 +524,7 @@ async function* streamGemini(
 async function* streamOpenAI(
   body: ReadableStream<Uint8Array>,
   usage: Usage,
+  state: StreamState,
 ): AsyncGenerator<string> {
   const reader = body.getReader();
   const read = makeIdleReader(reader);
@@ -399,6 +560,11 @@ async function* streamOpenAI(
           const parsed = JSON.parse(data);
           applyOpenAIUsage(parsed?.x_groq?.usage, usage);
           applyOpenAIUsage(parsed?.usage, usage);
+
+          const finishReason = parsed?.choices?.[0]?.finish_reason;
+          if (typeof finishReason === "string") {
+            state.finishReason = finishReason;
+          }
 
           const delta = parsed?.choices?.[0]?.delta;
           let text = "";
@@ -570,90 +736,97 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const messages = trimMessages(pending, MAX_HISTORY_CHARS);
 
-  let upstream: Response | null = null;
-  let selected: Candidate | null = null;
-  let lastDetail = "";
-  let quotaExceeded = false;
   const startedAt = Date.now();
+  const streamDeadline = startedAt + CONTINUATION_MAX_MS;
 
-  for (const candidate of chain) {
-    if (Date.now() - startedAt > MAX_TOTAL_MS) {
-      lastDetail = "Tempo total excedido ao consultar a IA.";
-      break;
-    }
+  const openUpstream = async (
+    requestMessages: ChatMessage[],
+    deadline: number,
+  ): Promise<OpenUpstreamResult> => {
+    let lastDetail = "";
+    let quotaExceeded = false;
 
-    const key = getProviderKey(candidate.provider);
-
-    if (!key) {
-      continue;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    let attempt: Response;
-
-    try {
-      if (candidate.provider === "gemini") {
-        const geminiUrl =
-          `https://generativelanguage.googleapis.com/v1beta/models/${candidate.model}:streamGenerateContent?alt=sse`;
-
-        attempt = await fetch(geminiUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": key,
-          },
-          body: buildGeminiRequest(messages),
-          signal: controller.signal,
-        });
-      } else {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        };
-
-        if (candidate.provider === "openrouter") {
-          const siteUrl = Deno.env.get("OPENROUTER_SITE_URL");
-          const appName = Deno.env.get("OPENROUTER_APP_NAME");
-          if (siteUrl) {
-            headers["HTTP-Referer"] = siteUrl;
-          }
-          if (appName) {
-            headers["X-Title"] = appName;
-          }
-        }
-
-        attempt = await fetch(OPENAI_BASE_URLS[candidate.provider], {
-          method: "POST",
-          headers,
-          body: buildOpenAIRequest(candidate.provider, candidate.model, messages),
-          signal: controller.signal,
-        });
+    for (const candidate of chain) {
+      if (Date.now() > deadline) {
+        lastDetail = "Tempo total excedido ao consultar a IA.";
+        break;
       }
-    } catch (error) {
+
+      const key = getProviderKey(candidate.provider);
+
+      if (!key) {
+        continue;
+      }
+
+      const requestController = new AbortController();
+      const timer = setTimeout(() => requestController.abort(), FETCH_TIMEOUT_MS);
+
+      let attempt: Response;
+
+      try {
+        if (candidate.provider === "gemini") {
+          const geminiUrl =
+            `https://generativelanguage.googleapis.com/v1beta/models/${candidate.model}:streamGenerateContent?alt=sse`;
+
+          attempt = await fetch(geminiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": key,
+            },
+            body: buildGeminiRequest(requestMessages),
+            signal: requestController.signal,
+          });
+        } else {
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          };
+
+          if (candidate.provider === "openrouter") {
+            const siteUrl = Deno.env.get("OPENROUTER_SITE_URL");
+            const appName = Deno.env.get("OPENROUTER_APP_NAME");
+            if (siteUrl) {
+              headers["HTTP-Referer"] = siteUrl;
+            }
+            if (appName) {
+              headers["X-Title"] = appName;
+            }
+          }
+
+          attempt = await fetch(OPENAI_BASE_URLS[candidate.provider], {
+            method: "POST",
+            headers,
+            body: buildOpenAIRequest(candidate.provider, candidate.model, requestMessages),
+            signal: requestController.signal,
+          });
+        }
+      } catch (error) {
+        clearTimeout(timer);
+        lastDetail = `${candidate.provider}:${candidate.model} indisponível (${String(error)}).`;
+        continue;
+      }
+
       clearTimeout(timer);
-      lastDetail = `${candidate.provider}:${candidate.model} indisponível (${String(error)}).`;
-      continue;
+
+      if (attempt.ok && attempt.body) {
+        return { ok: true, upstream: attempt, candidate };
+      }
+
+      lastDetail = await attempt.text().catch(() => "");
+
+      if (attempt.status === 429) {
+        quotaExceeded = true;
+      }
     }
 
-    clearTimeout(timer);
+    return { ok: false, quotaExceeded, detail: lastDetail };
+  };
 
-    if (attempt.ok && attempt.body) {
-      upstream = attempt;
-      selected = candidate;
-      break;
-    }
+  const initial = await openUpstream(messages, Math.min(streamDeadline, startedAt + MAX_TOTAL_MS));
 
-    lastDetail = await attempt.text().catch(() => "");
-
-    if (attempt.status === 429) {
-      quotaExceeded = true;
-    }
-  }
-
-  if (!upstream || !upstream.body || !selected) {
-    if (quotaExceeded) {
+  if (!initial.ok) {
+    if (initial.quotaExceeded) {
       return jsonResponse(
         { error: "Limite de uso da IA atingido em todos os provedores. Tente novamente mais tarde." },
         429,
@@ -663,42 +836,179 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse(
       {
         error: "Não consegui falar com a IA agora. Tente novamente em instantes.",
-        detail: lastDetail.slice(0, 300),
+        detail: initial.detail.slice(0, 300),
       },
       502,
     );
   }
 
+  let currentUpstream = initial.upstream;
+  let currentCandidate = initial.candidate;
   const encoder = new TextEncoder();
   const usage: Usage = {};
-  const upstreamBody = upstream.body;
-  const selectedCandidate = selected;
-  let fullText = "";
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const startedStream = Date.now();
+      let generatedAll = "";
+      let nextPrefix = "";
+      let segmentsSaved = 0;
+      let truncated = false;
+      let truncationReason = "";
 
       try {
-        const iterator = selectedCandidate.provider === "gemini"
-          ? streamGemini(upstreamBody, usage)
-          : streamOpenAI(upstreamBody, usage);
+        for (let segmentIndex = 0; segmentIndex < MAX_SEGMENTS; segmentIndex += 1) {
+          const upstreamBody = currentUpstream.body;
 
-        for await (const delta of iterator) {
-          fullText += delta;
-          controller.enqueue(encoder.encode(sse({ delta })));
+          if (!upstreamBody) {
+            throw new Error("Resposta da IA sem corpo.");
+          }
+
+          const state: StreamState = {};
+          const filter = new ContinuationFilter();
+          const boundaries = new SafeBoundaryBuffer();
+          const prefix = nextPrefix;
+          nextPrefix = "";
+          let segmentGenerated = "";
+          let segmentVisible = prefix;
+          let guardStopped = false;
+
+          controller.enqueue(encoder.encode(sse({ segment_start: segmentIndex, prefix })));
+
+          const iterator = currentCandidate.provider === "gemini"
+            ? streamGemini(upstreamBody, usage, state)
+            : streamOpenAI(upstreamBody, usage, state);
+
+          for await (const delta of iterator) {
+            const filtered = filter.push(delta);
+
+            if (!filtered) {
+              continue;
+            }
+
+            generatedAll += filtered;
+            segmentGenerated += filtered;
+            const out = boundaries.push(filtered);
+
+            if (out.emitted) {
+              segmentVisible += out.emitted;
+              controller.enqueue(encoder.encode(sse({ delta: out.emitted })));
+            }
+
+            if (
+              !guardStopped
+              && out.boundary
+              && approximateTokens(segmentGenerated)
+                >= Math.floor(SEGMENT_MAX_OUTPUT_TOKENS * SEGMENT_SOFT_TOKEN_RATIO)
+            ) {
+              guardStopped = true;
+              break;
+            }
+          }
+
+          const tail = filter.finish();
+
+          if (tail) {
+            generatedAll += tail;
+            segmentGenerated += tail;
+            const out = boundaries.push(tail);
+
+            if (out.emitted) {
+              segmentVisible += out.emitted;
+              controller.enqueue(encoder.encode(sse({ delta: out.emitted })));
+            }
+          }
+
+          const likelyCut = !state.finishReason
+            && approximateTokens(segmentGenerated) >= Math.floor(SEGMENT_MAX_OUTPUT_TOKENS * 0.95);
+          const limitReached = isLengthFinish(state.finishReason) || likelyCut;
+          const markerFound = filter.markerFound;
+          let shouldContinue = markerFound || limitReached || guardStopped;
+
+          if (!segmentVisible.trim() && !boundaries.pendingText.trim()) {
+            shouldContinue = false;
+          }
+
+          const totalLimitReached = approximateTokens(generatedAll) >= TOTAL_OUTPUT_TOKENS;
+          const timeLimitReached = Date.now() >= streamDeadline;
+          const segmentLimitReached = segmentIndex + 1 >= MAX_SEGMENTS;
+
+          if (shouldContinue && (totalLimitReached || timeLimitReached || segmentLimitReached)) {
+            truncated = true;
+            truncationReason = totalLimitReached
+              ? "total_tokens"
+              : timeLimitReached
+                ? "time"
+                : "segments";
+            shouldContinue = false;
+          }
+
+          const flushPending = !shouldContinue || markerFound;
+
+          if (flushPending) {
+            const pending = boundaries.takePending();
+
+            if (pending) {
+              segmentVisible += pending;
+              controller.enqueue(encoder.encode(sse({ delta: pending })));
+            }
+          } else {
+            nextPrefix = boundaries.takePending();
+          }
+
+          const contentToSave = segmentVisible.trim();
+
+          if (contentToSave) {
+            if (!isGuest && supabase) {
+              const { error: insertAssistantError } = await supabase.from("messages").insert({
+                conversation_id: conversationId,
+                role: "assistant",
+                content: contentToSave,
+              });
+
+              if (insertAssistantError) {
+                console.error("Erro ao salvar resposta da IA:", insertAssistantError.message);
+              }
+            }
+
+            segmentsSaved += 1;
+          }
+
+          controller.enqueue(encoder.encode(sse({
+            segment_end: segmentIndex,
+            reason: state.finishReason ?? (guardStopped ? "soft_limit" : "stop"),
+            continue: shouldContinue,
+          })));
+
+          if (!shouldContinue) {
+            break;
+          }
+
+          const generatedForContext = generatedAll.length > MAX_INPUT_CHARS
+            ? generatedAll.slice(-MAX_INPUT_CHARS)
+            : generatedAll;
+          const continuationMessages = trimMessages([
+            ...messages,
+            { role: "assistant", content: generatedForContext },
+            { role: "user", content: CONTINUE_INSTRUCTION },
+          ], MAX_HISTORY_CHARS);
+          const next = await openUpstream(continuationMessages, streamDeadline);
+
+          if (!next.ok) {
+            controller.enqueue(encoder.encode(sse({
+              error: next.quotaExceeded
+                ? "Limite de uso da IA atingido ao continuar a resposta."
+                : "Erro ao continuar a resposta.",
+            })));
+            break;
+          }
+
+          currentUpstream = next.upstream;
+          currentCandidate = next.candidate;
         }
 
-        if (!isGuest && supabase && fullText.trim().length > 0) {
-          const { error: insertAssistantError } = await supabase.from("messages").insert({
-            conversation_id: conversationId,
-            role: "assistant",
-            content: fullText,
-          });
-
-          if (insertAssistantError) {
-            console.error("Erro ao salvar resposta da IA:", insertAssistantError.message);
-          }
+        if (truncated) {
+          controller.enqueue(encoder.encode(sse({ truncated: true, reason: truncationReason })));
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -712,13 +1022,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       } finally {
         console.log(JSON.stringify({
           event: "ai_usage",
-          provider: selectedCandidate.provider,
-          model: selectedCandidate.model,
+          provider: currentCandidate.provider,
+          model: currentCandidate.model,
           promptTokens: usage.promptTokens ?? null,
           completionTokens: usage.completionTokens ?? null,
           thoughtTokens: usage.thoughtTokens ?? null,
           totalTokens: usage.totalTokens ?? null,
-          outputChars: fullText.length,
+          outputChars: generatedAll.length,
+          segments: segmentsSaved,
+          truncated,
+          truncationReason: truncated ? truncationReason : null,
           durationMs: Date.now() - startedStream,
         }));
 

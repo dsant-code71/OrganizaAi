@@ -130,12 +130,23 @@ O site é estático e publicado pela Vercel a partir do GitHub
   `openai/gpt-oss-20b`, depois Gemini `gemini-3.8-flash` e
   `gemini-3.5-flash-lite`, e por fim OpenRouter `:free`.
 - O consumo é reduzido com limite de histórico (`AI_HISTORY_MAX_CHARS`,
-  padrão `6000`), saída máxima (`AI_MAX_OUTPUT_TOKENS`, padrão `1024`) e
+  padrão `6000`), saída máxima por segmento (`AI_SEGMENT_MAX_TOKENS`,
+  padrão `1024`, com fallback do legado `AI_MAX_OUTPUT_TOKENS`) e
   `GEMINI_THINKING_LEVEL=low`.
 - No Groq, `openai/gpt-oss-*` usa `reasoning_effort=low` e `qwen/*` desativa o
   raciocínio por padrão para poupar tokens. Ajuste com
   `GROQ_REASONING_EFFORT`.
 - `429` em um provedor agora tenta o próximo da cadeia em vez de encerrar.
+- Respostas longas são divididas em segmentos e continuadas automaticamente:
+  a função detecta o marcador `[[CONTINUE]]` escrito pela IA, cortes por limite
+  de tokens (`finish_reason=length`) e o limite suave por segmento (~80%),
+  pausa em uma fronteira segura (fim de frase, parágrafo, item de lista, linha
+  de tabela ou bloco de código fechado) e abre um novo segmento preservando a
+  cauda pendente. Limites de segurança: `AI_TOTAL_OUTPUT_TOKENS` (padrão
+  `8192`), `AI_MAX_SEGMENTS` (padrão `8`) e `AI_CONTINUATION_DEADLINE_MS`
+  (padrão `120000`). Ao atingi-los, o aviso `truncated` é enviado ao frontend.
+- Cada segmento é salvo como uma mensagem `assistant` separada (banco no modo
+  autenticado; `localStorage` no modo visitante).
 - A cadeia é configurável:
 
 ```bash

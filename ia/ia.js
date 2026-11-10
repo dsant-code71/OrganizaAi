@@ -580,33 +580,98 @@ function appendError(text, onRetry) {
 }
 
 async function runAssistantReply(conversationId, text, isRetry = false) {
-  const typingRow = appendTyping();
+  let typingRow = appendTyping();
   let assistantBubble = null;
   let accumulated = "";
+  let hasContent = false;
+  let truncationReason = "";
 
-  try {
-    await streamReply(conversationId, text, (delta) => {
-      if (!assistantBubble) {
-        typingRow.remove();
-        assistantBubble = appendMessage("assistant", "");
-      }
-      accumulated += delta;
-      assistantBubble.innerHTML = renderMarkdown(accumulated);
-      scrollToBottom();
-    }, isRetry);
-
-    if (typingRow.isConnected) {
+  const removeTyping = () => {
+    if (typingRow && typingRow.isConnected) {
       typingRow.remove();
     }
+    typingRow = null;
+  };
 
-    if (!AUTH_ENABLED && accumulated.trim()) {
-      salvarMensagemLocal(conversationId, "assistant", accumulated);
+  const showTyping = () => {
+    removeTyping();
+    typingRow = appendTyping();
+  };
+
+  const createBubble = (prefix = "") => {
+    removeTyping();
+    assistantBubble = appendMessage("assistant", "");
+    accumulated = prefix;
+
+    if (prefix) {
+      assistantBubble.innerHTML = renderMarkdown(accumulated);
+    }
+  };
+
+  const finalizeSegment = () => {
+    if (!assistantBubble) {
+      return;
     }
 
-    if (!accumulated.trim()) {
-      if (assistantBubble) {
-        assistantBubble.closest(".msg")?.remove();
+    const content = accumulated.trim();
+
+    if (content) {
+      hasContent = true;
+
+      if (!AUTH_ENABLED) {
+        salvarMensagemLocal(conversationId, "assistant", content);
       }
+    } else {
+      assistantBubble.closest(".msg")?.remove();
+    }
+
+    assistantBubble = null;
+    accumulated = "";
+  };
+
+  try {
+    await streamReply(conversationId, text, {
+      onSegmentStart: (prefix) => {
+        finalizeSegment();
+
+        if (prefix) {
+          createBubble(prefix);
+        } else if (!typingRow) {
+          showTyping();
+        }
+      },
+      onDelta: (delta) => {
+        if (!assistantBubble) {
+          createBubble();
+        }
+
+        accumulated += delta;
+        assistantBubble.innerHTML = renderMarkdown(accumulated);
+        scrollToBottom();
+      },
+      onSegmentEnd: ({ continue: willContinue }) => {
+        finalizeSegment();
+
+        if (willContinue) {
+          showTyping();
+        }
+      },
+      onTruncated: (reason) => {
+        truncationReason = reason;
+      },
+    }, isRetry);
+
+    finalizeSegment();
+    removeTyping();
+
+    if (truncationReason) {
+      appendError(
+        "A resposta atingiu o limite de continuação. Envie \"continue\" para seguir de onde parei.",
+        null,
+      );
+    }
+
+    if (!hasContent) {
       const errorRow = appendError("Não obtive resposta. Tente novamente.", () => {
         errorRow.remove();
         runAssistantReply(conversationId, text, true);
@@ -615,10 +680,8 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
     }
   } catch (error) {
     console.error(error);
-    typingRow.remove();
-    if (assistantBubble && !accumulated.trim()) {
-      assistantBubble.closest(".msg")?.remove();
-    }
+    finalizeSegment();
+    removeTyping();
 
     if (error && error.status === 401) {
       if (!AUTH_ENABLED) {
@@ -694,7 +757,8 @@ async function onSubmit(event) {
   }
 }
 
-async function streamReply(conversationId, content, onDelta, isRetry = false) {
+async function streamReply(conversationId, content, handlers = {}, isRetry = false) {
+  const { onDelta, onSegmentStart, onSegmentEnd, onTruncated } = handlers;
   const headers = {
     "Content-Type": "application/json",
     apikey: SUPABASE_ANON_KEY,
@@ -780,8 +844,35 @@ async function streamReply(conversationId, content, onDelta, isRetry = false) {
         throw new Error(parsed.error);
       }
 
+      if (typeof parsed.segment_start === "number") {
+        if (onSegmentStart) {
+          onSegmentStart(typeof parsed.prefix === "string" ? parsed.prefix : "");
+        }
+        continue;
+      }
+
+      if (typeof parsed.segment_end === "number") {
+        if (onSegmentEnd) {
+          onSegmentEnd({
+            index: parsed.segment_end,
+            reason: parsed.reason,
+            continue: parsed.continue === true,
+          });
+        }
+        continue;
+      }
+
+      if (parsed.truncated === true) {
+        if (onTruncated) {
+          onTruncated(typeof parsed.reason === "string" ? parsed.reason : "unknown");
+        }
+        continue;
+      }
+
       if (typeof parsed.delta === "string") {
-        onDelta(parsed.delta);
+        if (onDelta) {
+          onDelta(parsed.delta);
+        }
       }
     }
   }
