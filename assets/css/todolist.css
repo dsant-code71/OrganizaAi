@@ -9,7 +9,7 @@ body > .brand {
     position: fixed;
     top: 20px;
     left: 20px;
-    z-index: 20;
+    z-index: 30;
 }
 
 .todo-container {
@@ -384,6 +384,19 @@ li.task-item.completed .remove-btn:hover {
 @media (max-width: 480px) {
     body {
         padding: 80px 12px calc(20px + env(safe-area-inset-bottom));
+    }
+
+    body > .brand {
+        top: 12px;
+        left: 12px;
+    }
+
+    body > .brand .brand-link {
+        padding: 4px;
+    }
+
+    body > .brand h1 {
+        display: none;
     }
 
     .todo-container {

@@ -122,58 +122,7 @@
         return (partes[0].charAt(0) + partes[partes.length - 1].charAt(0)).toUpperCase();
     }
 
-    function paginaAtualSidebar() {
-        var caminho = window.location.pathname.replace(/\\/g, '/').toLowerCase();
-
-        if (/\/ia\/index\.html$/.test(caminho)) {
-            return 'ia';
-        }
-
-        if (caminho === '/' || /\/index\.html$/.test(caminho)) {
-            return 'organiza';
-        }
-
-        return '';
-    }
-
-    function criarItemSidebar(opcoes) {
-        var link = document.createElement('a');
-        link.className = opcoes.classe;
-        link.href = opcoes.href;
-
-        if (opcoes.ativo) {
-            link.classList.add('is-active');
-            link.setAttribute('aria-current', 'page');
-        }
-
-        if (opcoes.titulo) {
-            link.title = opcoes.titulo;
-        }
-
-        var marca = document.createElement('span');
-        marca.className = 'sidebar-system-mark';
-        marca.setAttribute('aria-hidden', 'true');
-        marca.textContent = opcoes.marca;
-        link.appendChild(marca);
-
-        var texto = document.createElement('span');
-        texto.className = 'sidebar-system-text';
-
-        var titulo = document.createElement('strong');
-        titulo.textContent = opcoes.texto;
-
-        var descricao = document.createElement('small');
-        descricao.textContent = opcoes.descricao;
-
-        texto.appendChild(titulo);
-        texto.appendChild(descricao);
-        link.appendChild(texto);
-
-        return link;
-    }
-
     function renderSidebar() {
-        var pagina = paginaAtualSidebar();
         var sidebar = document.getElementById('sidebar');
 
         if (!sidebar) {
@@ -186,39 +135,6 @@
 
         sidebar.replaceChildren();
         document.body.classList.add('has-sidebar');
-
-        var topo = document.createElement('div');
-        topo.className = 'sidebar-top';
-
-        var rotuloSistemas = document.createElement('span');
-        rotuloSistemas.className = 'sidebar-section-label';
-        rotuloSistemas.textContent = 'Sistemas';
-        topo.appendChild(rotuloSistemas);
-
-        var sistemas = document.createElement('nav');
-        sistemas.className = 'sidebar-systems';
-        sistemas.setAttribute('aria-label', 'Sistemas');
-
-        sistemas.appendChild(criarItemSidebar({
-            classe: 'sidebar-system',
-            href: indexUrl,
-            texto: 'OrganizaAi',
-            descricao: 'Lista de tarefas',
-            marca: 'OA',
-            ativo: pagina === 'organiza'
-        }));
-
-        sistemas.appendChild(criarItemSidebar({
-            classe: 'sidebar-system',
-            href: iaUrl,
-            texto: 'EstudAI',
-            descricao: 'Assistente de estudos',
-            marca: 'EA',
-            ativo: pagina === 'ia'
-        }));
-
-        topo.appendChild(sistemas);
-        sidebar.appendChild(topo);
 
         var rodape = document.createElement('div');
         rodape.className = 'sidebar-footer';

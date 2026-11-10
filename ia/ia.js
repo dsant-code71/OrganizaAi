@@ -128,8 +128,18 @@ function salvarMensagemLocal(conversationId, role, content) {
 }
 
 function renderMarkdown(text) {
-  const html = marked.parse(text ?? "");
-  return DOMPurify.sanitize(html);
+  const html = DOMPurify.sanitize(marked.parse(text ?? ""));
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  template.content.querySelectorAll("table").forEach((table) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "table-wrap";
+    table.replaceWith(wrapper);
+    wrapper.appendChild(table);
+  });
+
+  return template.innerHTML;
 }
 
 function scrollToBottom(force = false) {
@@ -784,7 +794,7 @@ function openSidebar() {
   el.sidebarBackdrop.hidden = false;
   el.sidebarToggle.setAttribute("aria-expanded", "true");
   const firstItem = el.conversationsList.querySelector("button")
-    || el.sidebar.querySelector(".sidebar-system");
+    || el.sidebar.querySelector(".btn-new");
   if (firstItem) {
     firstItem.focus();
   }
