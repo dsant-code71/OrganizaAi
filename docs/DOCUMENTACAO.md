@@ -229,8 +229,11 @@ Em bancos existentes, `0003` aplica a limpeza.
   tarefas na lista do OrganizaAi: insert na tabela `tasks` (modo
   autenticado) ou escrita na chave `organizaai.tarefas.visitante.v1` do
   `localStorage` (modo visitante — a mesma chave usada por
-  `assets/js/todolist.js`). Bloco com JSON inválido cai no fallback de
-  bloco de código comum; fence ainda aberta durante o streaming mostra
+  `assets/js/todolist.js`). O JSON do bloco nunca é exibido no chat: JSON
+  válido vira card; inválido/truncado passa por recuperação tolerante
+  (extração dos itens completos, inclusive vírgulas penduradas) e, se não
+  houver itens recuperáveis, o bloco é descartado silenciosamente. Fence
+  ainda aberta durante o streaming mostra
   "Montando plano de estudos…".
 
 ## 10. Execução local

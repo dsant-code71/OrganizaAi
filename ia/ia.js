@@ -162,6 +162,47 @@ function normalizarPrioridadePlano(valor) {
   return "nenhuma";
 }
 
+function normalizarItensPlano(lista) {
+  return (Array.isArray(lista) ? lista : [])
+    .filter((item) => item && typeof item.titulo === "string" && item.titulo.trim())
+    .map((item) => ({
+      titulo: item.titulo.trim().slice(0, 300),
+      prioridade: normalizarPrioridadePlano(item.prioridade),
+    }));
+}
+
+function tentarExtrairTarefas(bruto) {
+  const texto = String(bruto ?? "").trim();
+  const candidatos = [
+    texto,
+    texto.replace(/,\s*([}\]])/g, "$1"),
+  ];
+
+  for (const candidato of candidatos) {
+    try {
+      const dados = JSON.parse(candidato || "null");
+      const itens = normalizarItensPlano(dados?.tarefas);
+
+      if (itens.length > 0) {
+        return itens;
+      }
+    } catch {
+      // tenta o próximo candidato
+    }
+  }
+
+  const tolerante = [...texto.matchAll(
+    /"titulo"\s*:\s*"([^"]+)"(?:[^{}]*?"prioridade"\s*:\s*"([^"]+)")?/g,
+  )]
+    .map((correspondencia) => ({
+      titulo: correspondencia[1].trim().slice(0, 300),
+      prioridade: normalizarPrioridadePlano(correspondencia[2]),
+    }))
+    .filter((item) => item.titulo);
+
+  return tolerante.length > 0 ? tolerante : null;
+}
+
 function extrairPlanos(texto, finalizado = false) {
   const linhas = String(texto ?? "").split("\n");
   const corpoLinhas = [];
@@ -171,26 +212,14 @@ function extrairPlanos(texto, finalizado = false) {
   let bufferPlano = null;
   let placeholder = false;
 
-  const registrarPlano = (bruto, cercaFinal) => {
-    try {
-      const dados = JSON.parse(bruto.trim() || "null");
-      const tarefas = Array.isArray(dados?.tarefas) ? dados.tarefas : [];
-      const lista = tarefas
-        .filter((item) => item && typeof item.titulo === "string" && item.titulo.trim())
-        .map((item) => ({
-          titulo: item.titulo.trim().slice(0, 300),
-          prioridade: normalizarPrioridadePlano(item.prioridade),
-        }));
+  // O bloco plano nunca é exibido como código: JSON válido vira card;
+  // inválido/truncado tenta recuperação tolerante e, se não der, é descartado.
+  const registrarPlano = (bruto) => {
+    const itens = tentarExtrairTarefas(bruto);
 
-      if (lista.length > 0) {
-        planos.push({ tarefas: lista });
-        return;
-      }
-    } catch {
-      // JSON inválido cai no fallback abaixo
+    if (itens && itens.length > 0) {
+      planos.push({ tarefas: itens });
     }
-
-    corpoLinhas.push("```plano", ...bruto.split("\n"), cercaFinal);
   };
 
   for (const linha of linhas) {
@@ -199,7 +228,7 @@ function extrairPlanos(texto, finalizado = false) {
 
     if (emPlano) {
       if (eCerca) {
-        registrarPlano(bufferPlano.join("\n"), trimmed);
+        registrarPlano(bufferPlano.join("\n"));
         emPlano = false;
         bufferPlano = null;
       } else {
@@ -227,7 +256,7 @@ function extrairPlanos(texto, finalizado = false) {
 
   if (emPlano && bufferPlano) {
     if (finalizado) {
-      registrarPlano(bufferPlano.join("\n"), "```");
+      registrarPlano(bufferPlano.join("\n"));
     } else {
       placeholder = true;
     }
