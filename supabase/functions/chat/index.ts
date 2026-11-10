@@ -34,6 +34,7 @@ const SYSTEM_INSTRUCTION = [
   "Quando o aluno pedir ajuda com exercícios, guie o raciocínio passo a passo em vez de apenas dar a resposta.",
   "Use exemplos curtos, formatação em Markdown e seja encorajador.",
   "Se a pergunta fugir de estudos, responda brevemente e ofereça ajuda com os estudos.",
+  "Quando o aluno pedir um guia, plano, cronograma ou roteiro de estudos, escreva o guia completo em Markdown e, como último elemento da resposta, inclua um bloco de código cercado por ```plano contendo somente um JSON válido no formato {\"versao\":1,\"tarefas\":[{\"titulo\":\"tópico de estudo\",\"prioridade\":\"alta|média|baixa|nenhuma\"}]}, com um item por tópico prático do guia. Mantenha os títulos curtos e acionáveis (cada um vira uma tarefa), feche sempre a cerca do bloco e nunca escreva o marcador [[CONTINUE]] dentro dele. Só inclua o bloco plano quando um guia, plano, cronograma ou roteiro for pedido.",
   "Quando a resposta for longa, organize-a em partes coesas e termine cada parte em um ponto natural, como fim de parágrafo, item de lista, fim de frase ou bloco de código fechado.",
   "Se ainda houver conteúdo para continuar, escreva exatamente [[CONTINUE]] na última linha da sua resposta, sem deixar tabelas ou blocos de código abertos. Caso a resposta esteja completa, não escreva o marcador.",
 ].join(" ");

@@ -222,6 +222,16 @@ Em bancos existentes, `0003` aplica a limpeza.
   `AI_CONTINUATION_DEADLINE_MS` (padrão `120000`). O legado
   `AI_MAX_OUTPUT_TOKENS` ainda é respeitado como fallback de
   `AI_SEGMENT_MAX_TOKENS`.
+- Integração EstudAI → OrganizaAi: pedidos de guia/plano/cronograma de
+  estudos fazem a IA anexar um bloco ```plano com JSON de tópicos. O
+  `ia/ia.js` extrai o bloco (`extrairPlanos`), renderiza um card interativo
+  (checkbox por tópico, prioridade alta/média/baixa/nenhuma) e cria as
+  tarefas na lista do OrganizaAi: insert na tabela `tasks` (modo
+  autenticado) ou escrita na chave `organizaai.tarefas.visitante.v1` do
+  `localStorage` (modo visitante — a mesma chave usada por
+  `assets/js/todolist.js`). Bloco com JSON inválido cai no fallback de
+  bloco de código comum; fence ainda aberta durante o streaming mostra
+  "Montando plano de estudos…".
 
 ## 10. Execução local
 

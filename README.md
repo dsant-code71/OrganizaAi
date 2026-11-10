@@ -147,6 +147,12 @@ O site é estático e publicado pela Vercel a partir do GitHub
   (padrão `120000`). Ao atingi-los, o aviso `truncated` é enviado ao frontend.
 - Cada segmento é salvo como uma mensagem `assistant` separada (banco no modo
   autenticado; `localStorage` no modo visitante).
+- Quando o aluno pede um guia, plano, cronograma ou roteiro de estudos, a IA
+  escreve o guia em Markdown e anexa ao final um bloco ```plano com JSON
+  (`{"versao":1,"tarefas":[{"titulo","prioridade"}]}`). O EstudAI renderiza
+  esse bloco como um card interativo (tópicos, prioridades e seleção) que
+  cria as tarefas na lista do OrganizaAi — direto no `tasks` via Supabase no
+  modo autenticado, ou na mesma chave de `localStorage` do modo visitante.
 - A cadeia é configurável:
 
 ```bash

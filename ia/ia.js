@@ -142,6 +142,365 @@ function renderMarkdown(text) {
   return template.innerHTML;
 }
 
+/* ---------------- Plano de estudos → tarefas OrganizaAi ---------------- */
+
+// Mesma chave usada por assets/js/todolist.js (organizaai.tarefas.visitante.v1).
+// Alterou aqui? Altere lá também.
+const CHAVE_TAREFAS_VISITANTE = "organizaai.tarefas.visitante.v1";
+
+function normalizarPrioridadePlano(valor) {
+  const bruto = String(valor ?? "").trim().toLowerCase();
+
+  if (bruto === "alta" || bruto === "baixa") {
+    return bruto;
+  }
+
+  if (bruto === "media" || bruto === "média") {
+    return "média";
+  }
+
+  return "nenhuma";
+}
+
+function extrairPlanos(texto, finalizado = false) {
+  const linhas = String(texto ?? "").split("\n");
+  const corpoLinhas = [];
+  const planos = [];
+  let emCodigo = false;
+  let emPlano = false;
+  let bufferPlano = null;
+  let placeholder = false;
+
+  const registrarPlano = (bruto, cercaFinal) => {
+    try {
+      const dados = JSON.parse(bruto.trim() || "null");
+      const tarefas = Array.isArray(dados?.tarefas) ? dados.tarefas : [];
+      const lista = tarefas
+        .filter((item) => item && typeof item.titulo === "string" && item.titulo.trim())
+        .map((item) => ({
+          titulo: item.titulo.trim().slice(0, 300),
+          prioridade: normalizarPrioridadePlano(item.prioridade),
+        }));
+
+      if (lista.length > 0) {
+        planos.push({ tarefas: lista });
+        return;
+      }
+    } catch {
+      // JSON inválido cai no fallback abaixo
+    }
+
+    corpoLinhas.push("```plano", ...bruto.split("\n"), cercaFinal);
+  };
+
+  for (const linha of linhas) {
+    const trimmed = linha.trim();
+    const eCerca = trimmed.startsWith("```");
+
+    if (emPlano) {
+      if (eCerca) {
+        registrarPlano(bufferPlano.join("\n"), trimmed);
+        emPlano = false;
+        bufferPlano = null;
+      } else {
+        bufferPlano.push(linha);
+      }
+    } else if (emCodigo) {
+      corpoLinhas.push(linha);
+      if (eCerca && trimmed === "```") {
+        emCodigo = false;
+      }
+    } else if (eCerca) {
+      const linguagem = trimmed.slice(3).trim().toLowerCase();
+
+      if (linguagem === "plano") {
+        emPlano = true;
+        bufferPlano = [];
+      } else {
+        emCodigo = true;
+        corpoLinhas.push(linha);
+      }
+    } else {
+      corpoLinhas.push(linha);
+    }
+  }
+
+  if (emPlano && bufferPlano) {
+    if (finalizado) {
+      registrarPlano(bufferPlano.join("\n"), "```");
+    } else {
+      placeholder = true;
+    }
+  }
+
+  return { corpo: corpoLinhas.join("\n"), planos, placeholder };
+}
+
+function obterEstadoPlano(estados, indice, plano) {
+  if (estados) {
+    const existente = estados.get(indice);
+
+    if (existente && existente.tarefas === plano.tarefas.length) {
+      return existente;
+    }
+  }
+
+  const novo = {
+    tarefas: plano.tarefas.length,
+    marcados: new Set(plano.tarefas.map((_, indiceTarefa) => indiceTarefa)),
+    prioridades: plano.tarefas.map((tarefa) => tarefa.prioridade),
+    resultado: null,
+    enviando: false,
+  };
+
+  if (estados) {
+    estados.set(indice, novo);
+  }
+
+  return novo;
+}
+
+async function adicionarTarefasDoPlano(itens) {
+  if (!itens.length) {
+    return 0;
+  }
+
+  if (!AUTH_ENABLED) {
+    let lista = [];
+
+    try {
+      const bruto = window.localStorage.getItem(CHAVE_TAREFAS_VISITANTE);
+      const dados = bruto ? JSON.parse(bruto) : [];
+
+      if (Array.isArray(dados)) {
+        lista = dados.filter((item) => item && typeof item === "object");
+      }
+    } catch {
+      lista = [];
+    }
+
+    let ordem = lista.reduce((maior, item) => Math.max(maior, Number(item?.ordem) || 0), 0);
+    const base = Date.now();
+
+    for (const item of itens) {
+      ordem += 1;
+      lista.push({
+        id: gerarIdLocal(),
+        texto: item.titulo,
+        concluida: false,
+        prioridade: item.prioridade,
+        ordem,
+        criadoEm: base + ordem,
+      });
+    }
+
+    window.localStorage.setItem(CHAVE_TAREFAS_VISITANTE, JSON.stringify(lista));
+    return itens.length;
+  }
+
+  const { data: topo, error: erroTopo } = await supabase
+    .from("tasks")
+    .select("ordem")
+    .order("ordem", { ascending: false })
+    .limit(1);
+
+  if (erroTopo) {
+    throw erroTopo;
+  }
+
+  const maior = topo?.[0] ? Number(topo[0].ordem) : 0;
+  const registros = itens.map((item, indice) => ({
+    user_id: state.session.user.id,
+    texto: item.titulo,
+    concluida: false,
+    prioridade: item.prioridade === "média" ? "media" : item.prioridade,
+    ordem: (isFinite(maior) ? maior : 0) + indice + 1,
+  }));
+
+  const { error: erroInsert } = await supabase.from("tasks").insert(registros);
+
+  if (erroInsert) {
+    throw erroInsert;
+  }
+
+  return registros.length;
+}
+
+function montarCardPlano(plano, estado) {
+  const card = document.createElement("div");
+  card.className = "plano-card";
+
+  const cabecalho = document.createElement("div");
+  cabecalho.className = "plano-cabecalho";
+
+  const icone = criarIcone("list-checks");
+  if (icone) {
+    cabecalho.appendChild(icone);
+  }
+
+  const titulo = document.createElement("span");
+  titulo.textContent = "Guia de estudos";
+  cabecalho.appendChild(titulo);
+
+  const contador = document.createElement("span");
+  contador.className = "plano-contador";
+  cabecalho.appendChild(contador);
+  card.appendChild(cabecalho);
+
+  const lista = document.createElement("div");
+  lista.className = "plano-lista";
+
+  const opcoesPrioridade = [
+    ["nenhuma", "Sem prioridade"],
+    ["alta", "Alta"],
+    ["média", "Média"],
+    ["baixa", "Baixa"],
+  ];
+
+  const atualizarContador = () => {
+    contador.textContent = `${estado.marcados.size}/${plano.tarefas.length} tópicos`;
+  };
+
+  plano.tarefas.forEach((tarefa, indice) => {
+    const linha = document.createElement("label");
+    linha.className = "plano-item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = estado.marcados.has(indice);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        estado.marcados.add(indice);
+      } else {
+        estado.marcados.delete(indice);
+      }
+      atualizarContador();
+      atualizarBotao();
+    });
+
+    const rotulo = document.createElement("span");
+    rotulo.className = "plano-item-titulo";
+    rotulo.textContent = tarefa.titulo;
+
+    const select = document.createElement("select");
+    select.className = "plano-prioridade";
+    select.setAttribute("aria-label", "Prioridade");
+
+    for (const [valor, texto] of opcoesPrioridade) {
+      const opcao = document.createElement("option");
+      opcao.value = valor;
+      opcao.textContent = texto;
+      select.appendChild(opcao);
+    }
+
+    select.value = estado.prioridades[indice];
+    select.addEventListener("change", () => {
+      estado.prioridades[indice] = select.value;
+    });
+
+    linha.append(checkbox, rotulo, select);
+    lista.appendChild(linha);
+  });
+
+  card.appendChild(lista);
+  atualizarContador();
+
+  const rodape = document.createElement("div");
+  rodape.className = "plano-rodape";
+
+  const resultado = document.createElement("div");
+  resultado.className = "plano-resultado";
+
+  const renderizarResultado = () => {
+    resultado.replaceChildren();
+    resultado.className = "plano-resultado" + (estado.resultado ? " " + estado.resultado.tipo : "");
+
+    if (!estado.resultado) {
+      return;
+    }
+
+    const texto = document.createElement("span");
+    texto.textContent = estado.resultado.texto;
+    resultado.appendChild(texto);
+
+    if (estado.resultado.tipo === "ok") {
+      const link = document.createElement("a");
+      link.href = "../index.html";
+      link.textContent = "Ver tarefas";
+      resultado.appendChild(link);
+    }
+  };
+
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "plano-botao";
+
+  const iconeBotao = criarIcone("plus");
+  if (iconeBotao) {
+    botao.appendChild(iconeBotao);
+  }
+
+  const textoBotao = document.createElement("span");
+  botao.appendChild(textoBotao);
+
+  const atualizarBotao = () => {
+    const quantidade = estado.marcados.size;
+    textoBotao.textContent = quantidade > 0
+      ? `Adicionar ${quantidade} ${quantidade > 1 ? "tarefas" : "tarefa"}`
+      : "Selecione tópicos";
+    botao.disabled = quantidade === 0 || estado.enviando;
+  };
+  atualizarBotao();
+
+  botao.addEventListener("click", async () => {
+    estado.enviando = true;
+    atualizarBotao();
+
+    const itens = plano.tarefas
+      .map((tarefa, indice) => ({ titulo: tarefa.titulo, prioridade: estado.prioridades[indice] }))
+      .filter((_, indice) => estado.marcados.has(indice));
+
+    try {
+      const quantidade = await adicionarTarefasDoPlano(itens);
+      estado.resultado = {
+        tipo: "ok",
+        texto: `${quantidade} ${quantidade > 1 ? "tarefas adicionadas" : "tarefa adicionada"} à sua lista.`,
+      };
+    } catch (erro) {
+      console.error("Não foi possível adicionar as tarefas do plano.", erro);
+      estado.resultado = {
+        tipo: "erro",
+        texto: "Não foi possível adicionar as tarefas. Tente novamente.",
+      };
+    }
+
+    estado.enviando = false;
+    renderizarResultado();
+    atualizarBotao();
+  });
+
+  renderizarResultado();
+  rodape.append(resultado, botao);
+  card.appendChild(rodape);
+  return card;
+}
+
+function renderizarConteudoAssistant(bubble, texto, estadosPlano = null, finalizado = false) {
+  const { corpo, planos, placeholder } = extrairPlanos(texto, finalizado);
+  bubble.innerHTML = renderMarkdown(corpo);
+
+  if (placeholder) {
+    const aviso = document.createElement("div");
+    aviso.className = "plano-loading";
+    aviso.textContent = "Montando plano de estudos…";
+    bubble.appendChild(aviso);
+  }
+
+  planos.forEach((plano, indice) => {
+    bubble.appendChild(montarCardPlano(plano, obterEstadoPlano(estadosPlano, indice, plano)));
+  });
+}
+
 function scrollToBottom(force = false) {
   const wrap = el.messages.parentElement;
   if (!wrap) {
@@ -514,7 +873,7 @@ function appendMessage(role, text) {
   bubble.className = "bubble";
 
   if (role === "assistant") {
-    bubble.innerHTML = renderMarkdown(text);
+    renderizarConteudoAssistant(bubble, text, null, true);
   } else {
     bubble.textContent = text;
   }
@@ -585,6 +944,7 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
   let accumulated = "";
   let hasContent = false;
   let truncationReason = "";
+  let estadosPlano = new Map();
 
   const removeTyping = () => {
     if (typingRow && typingRow.isConnected) {
@@ -602,9 +962,10 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
     removeTyping();
     assistantBubble = appendMessage("assistant", "");
     accumulated = prefix;
+    estadosPlano = new Map();
 
     if (prefix) {
-      assistantBubble.innerHTML = renderMarkdown(accumulated);
+      renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano);
     }
   };
 
@@ -612,6 +973,8 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
     if (!assistantBubble) {
       return;
     }
+
+    renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, true);
 
     const content = accumulated.trim();
 
@@ -646,7 +1009,7 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
         }
 
         accumulated += delta;
-        assistantBubble.innerHTML = renderMarkdown(accumulated);
+        renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano);
         scrollToBottom();
       },
       onSegmentEnd: ({ continue: willContinue }) => {
