@@ -12,6 +12,10 @@ var statusTimer = null;
 var autenticacaoAtiva = window.ORGANIZAAI_AUTH_ENABLED === true;
 var CHAVE_TAREFAS_VISITANTE = 'organizaai.tarefas.visitante.v1';
 
+function criarIcone(nome) {
+    return window.OrganizaIcons ? window.OrganizaIcons.criar(nome) : null;
+}
+
 function gerarId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
         return window.crypto.randomUUID();
@@ -234,9 +238,18 @@ function adicionarTarefaExistente(tarefa) {
 
     var botaoRemover = document.createElement('button');
     botaoRemover.className = 'remove-btn';
-    botaoRemover.innerText = 'Remover';
     botaoRemover.setAttribute('aria-label', 'Remover tarefa');
     botaoRemover.setAttribute('title', 'Remover tarefa');
+
+    var iconeRemover = criarIcone('trash-2');
+    if (iconeRemover) {
+        botaoRemover.appendChild(iconeRemover);
+    }
+
+    var rotuloRemover = document.createElement('span');
+    rotuloRemover.className = 'btn-label';
+    rotuloRemover.textContent = 'Remover';
+    botaoRemover.appendChild(rotuloRemover);
 
     botaoRemover.addEventListener('click', async function () {
         botaoRemover.disabled = true;
@@ -257,8 +270,8 @@ function adicionarTarefaExistente(tarefa) {
 
     var botaoConcluir = document.createElement('button');
     botaoConcluir.className = 'complete-btn';
-    botaoConcluir.innerText = tarefa.concluida ? 'Concluída' : 'Concluir';
     botaoConcluir.setAttribute('aria-label', tarefa.concluida ? 'Marcar como pendente' : 'Marcar como concluída');
+    botaoConcluir.setAttribute('aria-pressed', tarefa.concluida ? 'true' : 'false');
     botaoConcluir.setAttribute('title', tarefa.concluida ? 'Marcar como pendente' : 'Marcar como concluída');
 
     botaoConcluir.addEventListener('click', async function () {
@@ -268,8 +281,8 @@ function adicionarTarefaExistente(tarefa) {
         tarefa.concluida = novo;
         novaTarefa.classList.toggle('completed', novo);
         novaTarefa.dataset.concluida = novo ? 'true' : 'false';
-        botaoConcluir.innerText = novo ? 'Concluída' : 'Concluir';
         botaoConcluir.setAttribute('aria-label', novo ? 'Marcar como pendente' : 'Marcar como concluída');
+        botaoConcluir.setAttribute('aria-pressed', novo ? 'true' : 'false');
         botaoConcluir.setAttribute('title', novo ? 'Marcar como pendente' : 'Marcar como concluída');
 
         var atualizou = await atualizarTarefa(tarefa.id, novo, tarefa.prioridade);
@@ -278,8 +291,8 @@ function adicionarTarefaExistente(tarefa) {
             tarefa.concluida = anterior;
             novaTarefa.classList.toggle('completed', anterior);
             novaTarefa.dataset.concluida = anterior ? 'true' : 'false';
-            botaoConcluir.innerText = anterior ? 'Concluída' : 'Concluir';
             botaoConcluir.setAttribute('aria-label', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
+            botaoConcluir.setAttribute('aria-pressed', anterior ? 'true' : 'false');
             botaoConcluir.setAttribute('title', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
         }
 
@@ -610,7 +623,15 @@ function montarControles() {
     var btnLimpar = document.createElement('button');
     btnLimpar.id = 'btnLimpar';
     btnLimpar.type = 'button';
-    btnLimpar.textContent = 'Limpar lista';
+
+    var iconeLimpar = criarIcone('trash-2');
+    if (iconeLimpar) {
+        btnLimpar.appendChild(iconeLimpar);
+    }
+
+    var rotuloLimpar = document.createElement('span');
+    rotuloLimpar.textContent = 'Limpar lista';
+    btnLimpar.appendChild(rotuloLimpar);
     btnLimpar.addEventListener('click', limparTarefas);
     divLimpar.replaceChildren(btnLimpar);
 

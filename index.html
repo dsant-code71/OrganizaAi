@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OrganizaAi · Lista de Tarefas</title>
     <script src="assets/js/app-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="assets/js/icons.js"></script>
     <script src="assets/js/theme.js"></script>
+    <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/todolist.css" />
     <link rel="stylesheet" href="assets/css/auth.css" />
   </head>
@@ -38,7 +41,10 @@
           placeholder="No que você está trabalhando?"
           aria-label="Nova tarefa"
         />
-        <button id="addBtn" type="button">Adicionar</button>
+        <button id="addBtn" type="button" aria-label="Adicionar tarefa">
+          <i data-icon="plus" aria-hidden="true"></i>
+          <span class="btn-label">Adicionar</span>
+        </button>
       </div>
 
       <div id="count" aria-live="polite"></div>

@@ -8,6 +8,7 @@
     var avisoLogin = document.getElementById('avisoLogin');
     var mensagemLogin = document.getElementById('mensagemLogin');
     var googleBtn = document.getElementById('googleBtn');
+    var googleBtnLabel = document.getElementById('googleBtnLabel');
 
     function mostrarMensagem(texto, tipo) {
         mensagemLogin.textContent = texto || '';
@@ -22,7 +23,10 @@
 
     function carregando(ativo) {
         googleBtn.disabled = ativo;
-        googleBtn.textContent = ativo ? 'Redirecionando...' : 'Entrar com Google';
+
+        if (googleBtnLabel) {
+            googleBtnLabel.textContent = ativo ? 'Redirecionando...' : 'Entrar com Google';
+        }
     }
 
     function traduzirErro(erro) {

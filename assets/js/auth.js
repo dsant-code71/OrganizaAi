@@ -104,6 +104,10 @@
         });
     }
 
+    function criarIcone(nome) {
+        return window.OrganizaIcons ? window.OrganizaIcons.criar(nome) : null;
+    }
+
     function iniciais(nome) {
         var partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
 
@@ -285,10 +289,19 @@
             var sair = document.createElement('button');
             sair.type = 'button';
             sair.className = 'user-logout';
-            sair.textContent = 'Sair';
+
+            var iconeSair = criarIcone('log-out');
+            if (iconeSair) {
+                sair.appendChild(iconeSair);
+            }
+
+            var rotuloSair = document.createElement('span');
+            rotuloSair.textContent = 'Sair';
+            sair.appendChild(rotuloSair);
+
             sair.addEventListener('click', function () {
                 sair.disabled = true;
-                sair.textContent = 'Saindo...';
+                rotuloSair.textContent = 'Saindo...';
                 void signOut();
             });
             container.appendChild(sair);

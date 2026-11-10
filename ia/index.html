@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EstudAI · Assistente de Estudos</title>
     <script src="../assets/js/app-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="../assets/js/icons.js"></script>
     <script src="../assets/js/theme.js"></script>
+    <link rel="stylesheet" href="../assets/css/base.css" />
     <link rel="stylesheet" href="ia.css" />
   </head>
   <body>
@@ -29,7 +32,7 @@
             <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z"/>
           </svg>
-          Entrar com Google
+          <span id="googleBtnLabel">Entrar com Google</span>
         </button>
         <p id="loginMessage" class="login-message" role="status" aria-live="polite"></p>
         <div id="loginThemeSlot" class="login-theme"></div>
@@ -64,7 +67,8 @@
         <div class="sidebar-header">
           <span class="sidebar-title">Conversas</span>
           <button id="newConversationBtn" type="button" class="btn-new" title="Nova conversa">
-            + Nova
+            <i data-icon="plus" aria-hidden="true"></i>
+            <span>Nova</span>
           </button>
         </div>
         <nav id="conversationsList" class="conversations-list"></nav>
@@ -81,14 +85,19 @@
                 <small id="userEmail">Dados salvos neste navegador</small>
               </span>
             </div>
-            <button id="logoutBtn" type="button" class="btn-logout">Sair</button>
+            <button id="logoutBtn" type="button" class="btn-logout">
+              <i data-icon="log-out" aria-hidden="true"></i>
+              <span>Sair</span>
+            </button>
           </div>
         </div>
       </aside>
 
       <section class="chat-main" aria-label="Conversa">
         <header class="chat-header">
-          <button id="sidebarToggle" type="button" class="sidebar-toggle" aria-label="Abrir menu e conversas" aria-controls="sidebar" aria-expanded="false">☰</button>
+          <button id="sidebarToggle" type="button" class="sidebar-toggle" aria-label="Abrir menu e conversas" aria-controls="sidebar" aria-expanded="false">
+            <i data-icon="menu" aria-hidden="true"></i>
+          </button>
           <h2 id="chatTitle">EstudAI</h2>
         </header>
 
@@ -114,7 +123,10 @@
             aria-label="Mensagem"
             maxlength="4000"
           ></textarea>
-          <button id="sendBtn" type="submit" class="btn-send" aria-label="Enviar mensagem" disabled>Enviar</button>
+          <button id="sendBtn" type="submit" class="btn-send" aria-label="Enviar mensagem" disabled>
+            <i data-icon="send" aria-hidden="true"></i>
+            <span class="btn-send-label">Enviar</span>
+          </button>
         </form>
       </section>
     </main>

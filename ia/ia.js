@@ -11,6 +11,7 @@ const el = {
   loginScreen: document.getElementById("loginScreen"),
   chatApp: document.getElementById("chatApp"),
   googleBtn: document.getElementById("googleBtn"),
+  googleBtnLabel: document.getElementById("googleBtnLabel"),
   loginMessage: document.getElementById("loginMessage"),
   loginThemeSlot: document.getElementById("loginThemeSlot"),
   sidebar: document.getElementById("sidebar"),
@@ -39,6 +40,10 @@ const state = {
 };
 
 const CHAVE_CONVERSAS_VISITANTE = "organizaai.estudai.visitante.v1";
+
+function criarIcone(nome) {
+  return window.OrganizaIcons ? window.OrganizaIcons.criar(nome) : null;
+}
 
 function gerarIdLocal() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -150,7 +155,14 @@ function atualizarBotaoEnviar() {
 function setSending(sending) {
   state.sending = sending;
   atualizarBotaoEnviar();
-  el.sendBtn.textContent = sending ? "..." : "Enviar";
+  el.sendBtn.classList.toggle("is-sending", sending);
+  el.sendBtn.setAttribute("aria-label", sending ? "Enviando mensagem" : "Enviar mensagem");
+
+  const label = el.sendBtn.querySelector(".btn-send-label");
+  if (label) {
+    label.textContent = sending ? "..." : "Enviar";
+  }
+
   el.messages.setAttribute("aria-busy", sending ? "true" : "false");
 }
 
@@ -247,9 +259,11 @@ async function applyAuthState() {
 
 async function signInWithGoogle() {
   el.loginMessage.textContent = "";
-  const originalHtml = el.googleBtn.innerHTML;
   el.googleBtn.disabled = true;
-  el.googleBtn.textContent = "Redirecionando...";
+
+  if (el.googleBtnLabel) {
+    el.googleBtnLabel.textContent = "Redirecionando...";
+  }
 
   const redirectTo = new URL("./", window.location.href).href;
   const { error } = await supabase.auth.signInWithOAuth({
@@ -260,7 +274,10 @@ async function signInWithGoogle() {
   if (error) {
     el.loginMessage.textContent = "Não foi possível entrar: " + error.message;
     el.googleBtn.disabled = false;
-    el.googleBtn.innerHTML = originalHtml;
+
+    if (el.googleBtnLabel) {
+      el.googleBtnLabel.textContent = "Entrar com Google";
+    }
   }
 }
 
@@ -339,7 +356,16 @@ function renderConversations() {
     const active = conversation.id === state.currentId;
     item.className = "conversation-item" + (active ? " is-active" : "");
     item.setAttribute("aria-current", active ? "true" : "false");
-    item.textContent = conversation.title || "Conversa";
+
+    const icon = criarIcone("message-square");
+    if (icon) {
+      item.appendChild(icon);
+    }
+
+    const title = document.createElement("span");
+    title.className = "conversation-title";
+    title.textContent = conversation.title || "Conversa";
+    item.appendChild(title);
     item.title = conversation.title || "Conversa";
     item.addEventListener("click", () => {
       const wasOpen = el.sidebar.classList.contains("is-open");
@@ -524,7 +550,15 @@ function appendError(text, onRetry) {
     const retry = document.createElement("button");
     retry.type = "button";
     retry.className = "retry-btn";
-    retry.textContent = "Tentar novamente";
+
+    const retryIcon = criarIcone("rotate-ccw");
+    if (retryIcon) {
+      retry.appendChild(retryIcon);
+    }
+
+    const retryLabel = document.createElement("span");
+    retryLabel.textContent = "Tentar novamente";
+    retry.appendChild(retryLabel);
     retry.addEventListener("click", onRetry);
     bubble.appendChild(retry);
   }
