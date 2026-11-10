@@ -161,6 +161,31 @@ ul {
     list-style: none;
 }
 
+#listaTarefas {
+    max-height: min(56vh, 480px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+#listaTarefas::-webkit-scrollbar {
+    width: 8px;
+}
+
+#listaTarefas::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#listaTarefas::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+}
+
+#listaTarefas::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
 #listaTarefas:empty::after {
     content: "Nenhuma tarefa por aqui ainda. Adicione a primeira!";
     display: block;
@@ -384,6 +409,10 @@ li.task-item.completed .remove-btn:hover {
 @media (max-width: 480px) {
     body {
         padding: 80px 12px calc(20px + env(safe-area-inset-bottom));
+    }
+
+    #listaTarefas {
+        max-height: min(46vh, 420px);
     }
 
     body > .brand {

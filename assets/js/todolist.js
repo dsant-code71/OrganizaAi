@@ -177,6 +177,13 @@ function reordenarTarefas(opcoes) {
         lista.appendChild(item.elemento);
     });
 
+    if (destaque && destaque.isConnected) {
+        destaque.scrollIntoView({
+            block: 'nearest',
+            behavior: prefereMenosMovimento ? 'auto' : 'smooth'
+        });
+    }
+
     if (!animar) {
         return;
     }
@@ -448,6 +455,7 @@ async function adicionarTarefa() {
             tarefaInput.value = '';
             tarefaInput.focus();
             renderizarTarefas();
+            rolarAteTarefa(novaTarefa.id);
             mostrarStatus('Tarefa adicionada.', 'success');
             return;
         }
@@ -472,12 +480,25 @@ async function adicionarTarefa() {
         tarefaInput.value = '';
         tarefaInput.focus();
         renderizarTarefas();
+        rolarAteTarefa(resposta.data.id);
         mostrarStatus('Tarefa adicionada.', 'success');
     } catch (erro) {
         console.error('Não foi possível adicionar a tarefa.', erro);
         mostrarStatus('Não foi possível adicionar a tarefa. Tente novamente.', 'error');
     } finally {
         botaoAdicionar.disabled = tarefaInput.value.trim() === '';
+    }
+}
+
+function rolarAteTarefa(id) {
+    if (!id) {
+        return;
+    }
+
+    var elemento = document.querySelector('#listaTarefas li[data-id="' + id + '"]');
+
+    if (elemento) {
+        elemento.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 }
 
