@@ -38,8 +38,8 @@ Navegador (index.html, login.html, ia/)
    ├─ Modo visitante       localStorage + chat guest
    ├─ Supabase Auth        Google OAuth (quando reativado)
    ├─ Postgres             profiles / tasks / conversations / messages
-   └─ Edge Function chat   Deno + Gemini API
-              └─ secret GEMINI_API_KEY
+   └─ Edge Function chat   Deno + IA multi-provedor
+              └─ secrets GROQ_API_KEY / GEMINI_API_KEY
 ```
 
 ## Estrutura
@@ -66,7 +66,7 @@ supabase/
   migrations/0001_init.sql         Schema histórico (perfis/tarefas)
   migrations/0002_ai_chat.sql      Conversas/mensagens + trigger de perfil
   migrations/0003_remove_legacy.sql Limpeza de checklist/admin/CPF/papéis
-  functions/chat/index.ts          Proxy autenticado para o Gemini
+  functions/chat/index.ts          Proxy autenticado para IA (Groq/Gemini/OpenRouter)
 docs/
   DOCUMENTACAO.md                  Documentação técnica atual
   tarefas.md                       Material didático histórico
@@ -97,7 +97,7 @@ npx supabase db push
 
 ```bash
 npx supabase functions deploy chat --project-ref zuucmcmaexwvxypsgfks
-npx supabase secrets set GEMINI_API_KEY=... --project-ref zuucmcmaexwvxypsgfks
+npx supabase secrets set GROQ_API_KEY=... GEMINI_API_KEY=... --project-ref zuucmcmaexwvxypsgfks
 ```
 
 Sem o provider Google habilitado, o botão de entrada retorna erro de provider.
@@ -126,19 +126,35 @@ O site é estático e publicado pela Vercel a partir do GitHub
 
 ## Modelo da IA
 
-- Modelo padrão: `gemini-3.5-flash`.
-- A função tenta modelos alternativos quando há 503/429 ou timeout.
-- A chave é enviada no header `x-goog-api-key`.
-- Para alterar o modelo:
+- Cadeia padrão (free tier): Groq `openai/gpt-oss-120b`, `qwen/qwen3.8-27b`,
+  `openai/gpt-oss-20b`, depois Gemini `gemini-3.8-flash` e
+  `gemini-3.5-flash-lite`, e por fim OpenRouter `:free`.
+- O consumo é reduzido com limite de histórico (`AI_HISTORY_MAX_CHARS`,
+  padrão `6000`), saída máxima (`AI_MAX_OUTPUT_TOKENS`, padrão `1024`) e
+  `GEMINI_THINKING_LEVEL=low`.
+- No Groq, `openai/gpt-oss-*` usa `reasoning_effort=low` e `qwen/*` desativa o
+  raciocínio por padrão para poupar tokens. Ajuste com
+  `GROQ_REASONING_EFFORT`.
+- `429` em um provedor agora tenta o próximo da cadeia em vez de encerrar.
+- A cadeia é configurável:
 
 ```bash
-npx supabase secrets set GEMINI_MODEL=gemini-3.8-flash --project-ref zuucmcmaexwvxypsgfks
+npx supabase secrets set AI_CHAIN="groq:openai/gpt-oss-120b,gemini:gemini-3.8-flash" --project-ref zuucmcmaexwvxypsgfks
+```
+
+- Chaves: `GROQ_API_KEY`, `GEMINI_API_KEY` e, opcionalmente,
+  `OPENROUTER_API_KEY`.
+- Para forçar um modelo Gemini específico:
+
+```bash
+npx supabase secrets set GEMINI_MODEL=gemini-3.5-flash-lite --project-ref zuucmcmaexwvxypsgfks
 ```
 
 ## Segurança
 
 - A `publishable key` é pública por design; a proteção vem do RLS.
-- A `GEMINI_API_KEY` fica apenas nos secrets do Supabase.
+- As chaves `GROQ_API_KEY`, `GEMINI_API_KEY` e `OPENROUTER_API_KEY` ficam
+  apenas nos secrets do Supabase.
 - No modo visitante, a função `chat` aceita chamadas sem JWT (`guest: true`).
   Use esse modo apenas para uso local/pessoal; ao reativar a auth, o fluxo
   autenticado volta a ser exigido.
@@ -153,6 +169,6 @@ npx supabase secrets set GEMINI_MODEL=gemini-3.8-flash --project-ref zuucmcmaexw
 - **IA indisponível no modo visitante**: publique a função `chat` atualizada.
 - **Tarefas/conversas somem**: o modo visitante salva por navegador e origem;
   outro navegador ou domínio terá outro `localStorage`.
-- **Erro 502 na função**: confira `GEMINI_API_KEY` e a cota do Gemini.
+- **Erro 502 na função**: confira as chaves configuradas e a cota dos provedores.
 - **Perfil não encontrado**: verifique o trigger `on_auth_user_created` e a
   migration `0002_ai_chat.sql`.

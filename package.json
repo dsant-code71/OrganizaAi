@@ -2,7 +2,7 @@
   "name": "organizaai",
   "version": "1.0.0",
   "private": true,
-  "description": "OrganizaAi · lista de tarefas e assistente de estudos (Supabase + Gemini)",
+  "description": "OrganizaAi · lista de tarefas e assistente de estudos (Supabase + IA multi-provedor)",
   "scripts": {
     "supabase": "supabase",
     "functions:deploy": "supabase functions deploy chat --project-ref zuucmcmaexwvxypsgfks",

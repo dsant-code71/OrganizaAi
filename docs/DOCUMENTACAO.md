@@ -21,7 +21,7 @@ CPF ou auditoria. O login por e-mail/senha foi removido.
 | Autenticação | Supabase Auth com Google OAuth (desativada por flag) |
 | Banco | PostgreSQL no Supabase (modo autenticado) |
 | Backend de IA | Edge Function `chat` em Deno |
-| Modelo | Google Gemini |
+| Modelo | IA multi-provedor (Groq, Gemini e OpenRouter) |
 | Deploy | Vercel (estático) |
 
 ## 3. Estrutura
@@ -206,7 +206,10 @@ Em bancos existentes, `0003` aplica a limpeza.
 - `ia/ia.js`: conversas locais ou Supabase, mensagens, streaming e Markdown
   sanitizado.
 - `supabase/functions/chat/index.ts`: valida a sessão no modo autenticado ou
-  aceita `guest: true` sem banco; chama o Gemini e devolve streaming.
+  aceita `guest: true` sem banco; percorre a cadeia de IA (Groq, Gemini e
+  OpenRouter), tenta o próximo provedor em `429`/`5xx`/timeout e devolve
+  streaming. O histórico é limitado por caracteres e a saída por
+  `AI_MAX_OUTPUT_TOKENS` para conter o consumo de tokens.
 
 ## 10. Execução local
 
@@ -229,7 +232,8 @@ npx supabase functions serve chat --env-file ./supabase/.env.local
 No modo visitante, basta publicar o frontend e a função `chat` atualizada:
 
 1. Publique a função com `npx supabase functions deploy chat`.
-2. Configure `GEMINI_API_KEY` nos secrets.
+2. Configure `GROQ_API_KEY` e `GEMINI_API_KEY` nos secrets (e
+   `OPENROUTER_API_KEY` se usar o fallback).
 3. Faça push para o GitHub; a Vercel publica os arquivos estáticos.
 
 Ao reativar a autenticação, aplique também as migrations com
@@ -237,7 +241,8 @@ Ao reativar a autenticação, aplique também as migrations com
 
 ## 12. Segurança
 
-- Não coloque `GEMINI_API_KEY` no frontend.
+- Não coloque `GROQ_API_KEY`, `GEMINI_API_KEY` nem `OPENROUTER_API_KEY` no
+  frontend.
 - Mantenha RLS habilitado em todas as tabelas.
 - No modo visitante, a função `chat` aceita chamadas sem JWT; use apenas para
   uso local/pessoal. Ao reativar a auth, o fluxo autenticado volta a ser exigido.
@@ -256,7 +261,7 @@ Ao reativar a autenticação, aplique também as migrations com
 | 401 no chat visitante | Função antiga sem `guest` | Publicar `chat` atualizada |
 | Tarefas/conversas somem | Outro navegador/origem | Usar o mesmo `localStorage` |
 | 401 no chat autenticado | Sessão expirada | Entrar novamente |
-| 502 no chat | Chave/cota do Gemini | Revisar secret e cota |
+| 502 no chat | Chaves/cota dos provedores | Revisar secrets e cotas |
 
 ## 14. Checklist de validação
 
