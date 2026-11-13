@@ -82,6 +82,9 @@ const CONTINUATION_MARKER = "[[CONTINUE]]";
 const CONTINUE_INSTRUCTION =
   "Continue exatamente de onde a resposta anterior parou, sem repetir o conteúdo já escrito. Mantenha a mesma formatação em Markdown. Não escreva o marcador [[CONTINUE]] se a resposta estiver completa.";
 const MAX_HISTORY_CHARS = envInt("AI_HISTORY_MAX_CHARS", 6000, 1000, 20000);
+const TITLE_MAX_TOKENS = 32;
+const TITLE_MAX_CHARS = 60;
+const TITLE_INPUT_CHARS = 300;
 const GEMINI_THINKING_LEVEL = (Deno.env.get("GEMINI_THINKING_LEVEL") ?? "low").toLowerCase();
 const GROQ_REASONING_EFFORT_RAW = Deno.env.get("GROQ_REASONING_EFFORT")?.trim().toLowerCase();
 const GROQ_REASONING_EFFORT = GROQ_REASONING_EFFORT_RAW ?? "low";
@@ -622,6 +625,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     content?: string;
     retry?: boolean;
     guest?: boolean;
+    needsTitle?: boolean;
     history?: Array<{ role?: string; content?: string }>;
   };
 
@@ -651,6 +655,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let conversationId = "";
   let history: ChatMessage[] = [];
   let skipUserInsert = false;
+  let shouldGenerateTitle = false;
+  let userPromptForTitle = content;
+
+  const hasAssistantHistory = () =>
+    history.some((message) => message.role === "assistant" && message.content.trim().length > 0);
 
   if (isGuest) {
     const historico = Array.isArray(payload.history) ? payload.history : [];
@@ -665,6 +674,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         role: message.role as string,
         content: message.content as string,
       }));
+
+    shouldGenerateTitle = payload.needsTitle === true && !hasAssistantHistory();
   } else {
     if (!supabaseUrl || !anonKey) {
       return jsonResponse({ error: "Servidor não configurado." }, 500);
@@ -714,6 +725,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const lastMessage = history[history.length - 1];
     skipUserInsert = isRetry && lastMessage?.role === "user" && lastMessage.content === content;
 
+    shouldGenerateTitle =
+      !isRetry && conversation.title === "Nova conversa" && !hasAssistantHistory();
+
     if (!skipUserInsert) {
       const { error: insertUserError } = await db.from("messages").insert({
         conversation_id: conversationId,
@@ -744,6 +758,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const openUpstream = async (
     requestMessages: ChatMessage[],
     deadline: number,
+    maxTokens?: number,
   ): Promise<OpenUpstreamResult> => {
     let lastDetail = "";
     let quotaExceeded = false;
@@ -776,7 +791,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
               "Content-Type": "application/json",
               "x-goog-api-key": key,
             },
-            body: buildGeminiRequest(requestMessages),
+            body: buildGeminiRequest(requestMessages, maxTokens),
             signal: requestController.signal,
           });
         } else {
@@ -799,7 +814,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           attempt = await fetch(OPENAI_BASE_URLS[candidate.provider], {
             method: "POST",
             headers,
-            body: buildOpenAIRequest(candidate.provider, candidate.model, requestMessages),
+            body: buildOpenAIRequest(candidate.provider, candidate.model, requestMessages, maxTokens),
             signal: requestController.signal,
           });
         }
@@ -1011,6 +1026,79 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
         if (truncated) {
           controller.enqueue(encoder.encode(sse({ truncated: true, reason: truncationReason })));
+        }
+
+        if (shouldGenerateTitle && segmentsSaved > 0) {
+          try {
+            const titlePrompt =
+              `Gere um título curto com no máximo 8 palavras para esta conversa de estudos. ` +
+              `Responda somente com o título, em português do Brasil, sem aspas, sem dois-pontos e sem pontuação final. ` +
+              `Pergunta do aluno: ${userPromptForTitle.slice(0, TITLE_INPUT_CHARS)}`;
+            const titleRequest = await openUpstream(
+              [{ role: "user", content: titlePrompt }],
+              streamDeadline,
+              TITLE_MAX_TOKENS,
+            );
+
+            if (!titleRequest.ok) {
+              controller.enqueue(encoder.encode(
+                sse({ titleFail: `upstream: ${titleRequest.quotaExceeded ? "quota" : "erro"} ${titleRequest.detail.slice(0, 300)}` }),
+              ));
+            }
+
+            if (titleRequest.ok && titleRequest.upstream.body) {
+              const titleUsage: Usage = {};
+              const titleState: StreamState = {};
+              const titleIterator = titleRequest.candidate.provider === "gemini"
+                ? streamGemini(titleRequest.upstream.body, titleUsage, titleState)
+                : streamOpenAI(titleRequest.upstream.body, titleUsage, titleState);
+
+              let tituloBruto = "";
+              for await (const delta of titleIterator) {
+                tituloBruto += delta;
+              }
+
+              const tituloLimpo = tituloBruto
+                .split("\n")[0]
+                .replace(/^["'`\s]+|["'`\s]+$/g, "")
+                .replace(/[:.!?…;,]+/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .split(" ")
+                .slice(0, 8)
+                .join(" ");
+
+              const limite = Math.min(TITLE_MAX_CHARS, tituloLimpo.length);
+              const corte = limite < tituloLimpo.length
+                ? tituloLimpo.lastIndexOf(" ", limite)
+                : limite;
+              const titulo = (corte > 0 ? tituloLimpo.slice(0, corte) : tituloLimpo.slice(0, limite)).trim();
+
+              if (titulo.length >= 2) {
+                if (!isGuest && supabase) {
+                  const { error: titleError } = await supabase
+                    .from("conversations")
+                    .update({ title })
+                    .eq("id", conversationId);
+
+                  if (titleError) {
+                    console.error("Erro ao salvar título:", titleError.message);
+                  }
+                }
+
+                controller.enqueue(encoder.encode(sse({ title: titulo })));
+              } else {
+                controller.enqueue(encoder.encode(
+                  sse({ titleFail: `sanitize: bruto=${JSON.stringify(tituloBruto.slice(0, 120))} limpo=${JSON.stringify(titulo)}` }),
+                ));
+              }
+            }
+          } catch (error) {
+            console.error("Erro ao gerar título:", error);
+            controller.enqueue(encoder.encode(
+              sse({ titleFail: `exception: ${String(error).slice(0, 300)}` }),
+            ));
+          }
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

@@ -154,6 +154,14 @@
 
             window.OrganizaTema.montarBotao(tema, 'sidebar-theme-toggle');
 
+            if (typeof window.OrganizaTema.montarCor === 'function') {
+                var cor = document.createElement('div');
+                cor.className = 'sidebar-accent';
+                ferramentas.appendChild(cor);
+
+                window.OrganizaTema.montarCor(cor);
+            }
+
             rodape.appendChild(ferramentas);
         }
 

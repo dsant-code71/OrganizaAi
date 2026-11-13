@@ -89,6 +89,37 @@ body {
     color: var(--accent);
 }
 
+.login-accent {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.login-accent .accent-picker {
+    width: auto;
+}
+
+.login-accent .accent-toggle {
+    min-height: 34px;
+    padding: 0 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+}
+
+.login-accent .accent-toggle:hover,
+.login-accent .accent-picker[open] .accent-toggle {
+    background: var(--surface);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.login-accent .accent-panel {
+    left: 50%;
+    transform: translateX(-50%);
+}
+
 /* Layout do chat */
 
 .chat-app {
@@ -240,8 +271,18 @@ body {
     gap: 4px;
 }
 
-.sidebar-theme {
+.sidebar-theme,
+.sidebar-accent {
     display: flex;
+}
+
+.sidebar-accent .accent-picker {
+    width: 100%;
+}
+
+.sidebar-accent .accent-toggle {
+    justify-content: flex-start;
+    width: 100%;
 }
 
 .sidebar-theme-toggle {
@@ -416,7 +457,7 @@ body {
 .msg-user .bubble {
     background: var(--gradient);
     border-bottom-right-radius: 6px;
-    color: #fff;
+    color: var(--accent-contrast);
     white-space: pre-wrap;
 }
 

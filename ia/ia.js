@@ -14,6 +14,7 @@ const el = {
   googleBtnLabel: document.getElementById("googleBtnLabel"),
   loginMessage: document.getElementById("loginMessage"),
   loginThemeSlot: document.getElementById("loginThemeSlot"),
+  loginAccentSlot: document.getElementById("loginAccentSlot"),
   sidebar: document.getElementById("sidebar"),
   sidebarToggle: document.getElementById("sidebarToggle"),
   sidebarBackdrop: document.getElementById("sidebarBackdrop"),
@@ -26,6 +27,7 @@ const el = {
   sendBtn: document.getElementById("sendBtn"),
   chatTitle: document.getElementById("chatTitle"),
   themeSlot: document.getElementById("themeSlot"),
+  accentSlot: document.getElementById("accentSlot"),
   userAvatar: document.getElementById("userAvatar"),
   userName: document.getElementById("userName"),
   userEmail: document.getElementById("userEmail"),
@@ -843,31 +845,28 @@ async function selectConversation(id) {
   renderMessages(data ?? []);
 }
 
-async function refreshTitleIfNeeded(conversationId, firstText) {
+async function aplicarTitulo(conversationId, title) {
   const conversation = state.conversations.find((c) => c.id === conversationId);
-  if (!conversation || conversation.title !== "Nova conversa") {
+  if (!conversation || !title.trim()) {
     return;
   }
 
-  const title = firstText.replace(/\s+/g, " ").trim().slice(0, 60) || "Nova conversa";
+  conversation.title = title.trim();
+  el.chatTitle.textContent = conversation.title;
 
   if (!AUTH_ENABLED) {
-    conversation.title = title;
     conversation.updated_at = new Date().toISOString();
     salvarConversasLocais();
-    el.chatTitle.textContent = title;
     renderConversations();
     return;
   }
 
   const { error } = await supabase
     .from("conversations")
-    .update({ title })
+    .update({ title: conversation.title })
     .eq("id", conversationId);
 
   if (!error) {
-    conversation.title = title;
-    el.chatTitle.textContent = title;
     renderConversations();
   }
 }
@@ -967,7 +966,7 @@ function appendError(text, onRetry) {
   return row;
 }
 
-async function runAssistantReply(conversationId, text, isRetry = false) {
+async function runAssistantReply(conversationId, text, isRetry = false, needsTitle = false) {
   let typingRow = appendTyping();
   let assistantBubble = null;
   let accumulated = "";
@@ -1051,7 +1050,10 @@ async function runAssistantReply(conversationId, text, isRetry = false) {
       onTruncated: (reason) => {
         truncationReason = reason;
       },
-    }, isRetry);
+      onTitle: (titulo) => {
+        aplicarTitulo(conversationId, titulo);
+      },
+    }, isRetry, needsTitle);
 
     finalizeSegment();
     removeTyping();
@@ -1125,7 +1127,12 @@ async function onSubmit(event) {
     }
   }
 
-  const isFirstMessage = el.messages.children.length === 0;
+  const conversaAtual = state.conversations.find((item) => item.id === conversationId);
+  const precisaTitulo = Boolean(
+    conversaAtual
+    && conversaAtual.title === "Nova conversa"
+    && !(conversaAtual.messages ?? []).some((mensagem) => mensagem.role === "assistant"),
+  );
 
   if (!AUTH_ENABLED) {
     salvarMensagemLocal(conversationId, "user", text);
@@ -1138,24 +1145,21 @@ async function onSubmit(event) {
   appendMessage("user", text);
 
   try {
-    await runAssistantReply(conversationId, text);
+    await runAssistantReply(conversationId, text, false, precisaTitulo);
   } finally {
     setSending(false);
     el.messageInput.focus();
-    if (isFirstMessage) {
-      await refreshTitleIfNeeded(conversationId, text);
-    }
     await loadConversations();
   }
 }
 
-async function streamReply(conversationId, content, handlers = {}, isRetry = false) {
-  const { onDelta, onSegmentStart, onSegmentEnd, onTruncated } = handlers;
+async function streamReply(conversationId, content, handlers = {}, isRetry = false, needsTitle = false) {
+  const { onDelta, onSegmentStart, onSegmentEnd, onTruncated, onTitle } = handlers;
   const headers = {
     "Content-Type": "application/json",
     apikey: SUPABASE_ANON_KEY,
   };
-  const body = { conversationId, content, retry: isRetry };
+  const body = { conversationId, content, retry: isRetry, needsTitle };
 
   if (AUTH_ENABLED) {
     headers.Authorization = `Bearer ${state.session.access_token}`;
@@ -1261,6 +1265,13 @@ async function streamReply(conversationId, content, handlers = {}, isRetry = fal
         continue;
       }
 
+      if (typeof parsed.title === "string" && parsed.title) {
+        if (onTitle) {
+          onTitle(parsed.title);
+        }
+        continue;
+      }
+
       if (typeof parsed.delta === "string") {
         if (onDelta) {
           onDelta(parsed.delta);
@@ -1298,6 +1309,11 @@ function bindEvents() {
   if (window.OrganizaTema) {
     window.OrganizaTema.montarBotao(el.loginThemeSlot, "login-theme-toggle");
     window.OrganizaTema.montarBotao(el.themeSlot, "sidebar-theme-toggle");
+
+    if (typeof window.OrganizaTema.montarCor === "function") {
+      window.OrganizaTema.montarCor(el.loginAccentSlot);
+      window.OrganizaTema.montarCor(el.accentSlot);
+    }
   }
 
   el.googleBtn.addEventListener("click", signInWithGoogle);

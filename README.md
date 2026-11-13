@@ -24,6 +24,8 @@ Com `false`:
 - Tarefas ficam em `organizaai.tarefas.visitante.v1` no `localStorage`.
 - EstudAI abre direto e as conversas ficam em
   `organizaai.estudai.visitante.v1` no `localStorage`.
+- A cor dos detalhes é escolhida em Preferências (paleta ou cor livre) e fica
+  em `organizaai-cor-destaque` no `localStorage`, junto do tema.
 - O chat chama a Edge Function com `guest: true`, sem gravar no Postgres.
 - `login.html`, `auth.js`, `login.js` e as migrations continuam intactos.
 
@@ -54,7 +56,7 @@ assets/
   js/auth.js                       Sessão, perfil, sidebar e logout
   js/login.js                      Fluxo OAuth e redirecionamento
   js/supabase-config.js            URL + publishable key
-  js/theme.js                      Tema claro/escuro
+  js/theme.js                      Tema claro/escuro e cor dos detalhes
   js/todolist.js                   CRUD de tarefas (local ou Supabase)
 ia/
   index.html                       EstudAI — login + chat

@@ -198,7 +198,10 @@ Em bancos existentes, `0003` aplica a limpeza.
 - `assets/js/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
   tarefas. Usa `localStorage` no modo visitante ou Supabase no modo autenticado.
 - `assets/js/auth.js`: valida a sessão e monta sidebar/conta.
-- `assets/js/theme.js`: tema claro/escuro persistido em `localStorage`.
+- `assets/js/theme.js`: tema claro/escuro e cor dos detalhes persistidos em
+  `localStorage` (`organizaai-tema` e `organizaai-cor-destaque`). A cor de
+  destaque aceita paleta de presets ou seletor livre e recalcula os tons de
+  gradiente, foco, sombra e contraste ao trocar entre claro e escuro.
 
 ### 9.2 EstudAI
 
@@ -296,6 +299,7 @@ Modo visitante (atual):
 - [ ] Tarefas persistem no `localStorage` após recarregar.
 - [ ] Sidebar mostra apenas OrganizAI e EstudAI.
 - [ ] Tema claro/escuro funciona nas telas.
+- [ ] Cor dos detalhes muda por preset ou seletor livre e persiste ao recarregar.
 - [ ] EstudAI abre direto e lista conversas locais.
 - [ ] Chat responde via função `chat` com `guest: true`.
 - [ ] Conversas locais persistem no `localStorage`.
