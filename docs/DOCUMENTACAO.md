@@ -241,15 +241,17 @@ Em bancos existentes, `0003` aplica a limpeza.
 - Perguntas de estudo: pedidos de perguntas, exercícios ou quiz fazem a IA
   anexar um bloco ```perguntas com JSON
   (`{"versao":1,"perguntas":[{"enunciado","alternativas","corretas","multipla"}]}`).
+  Cada pergunta traz alternativas em quantidade flexível e `corretas`
+  obrigatório com índice(s) válido(s) (1 índice quando `multipla:false`, 1+
+  quando `multipla:true`), garantindo sempre ao menos uma alternativa correta.
   O `ia/ia.js` extrai o bloco no mesmo parser de `plano`, renderiza um card
   com checkboxes por alternativa e, ao enviar, corrige localmente comparando
   as marcações com os índices de `corretas`: alternativas corretas ficam em
   verde, erradas em vermelho e o card mostra o resumo de acertos. Em seguida,
   as respostas marcadas são enviadas como mensagem de usuário para a IA
   explicar cada acerto/erro usando o bloco presente no histórico. Com
-  `multipla: false`, o card permite apenas uma marcação por pergunta. Se o
-  gabarito estiver ausente ou inválido, a correção local é omitida e a
-  explicação fica apenas com a IA. O JSON nunca é exibido no chat; blocos
+  `multipla: false`, o card permite apenas uma marcação por pergunta. O JSON
+  nunca é exibido no chat; perguntas sem alternativa correta válida e blocos
   inválidos/truncados são descartados ou recuperados de forma tolerante, e
   uma fence aberta durante o streaming mostra "Montando perguntas…".
 

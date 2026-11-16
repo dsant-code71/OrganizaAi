@@ -260,16 +260,25 @@ function normalizarPerguntas(lista) {
         .filter((alternativa) => typeof alternativa === "string" && alternativa.trim())
         .map((alternativa) => alternativa.trim().slice(0, 300))
         .slice(0, 6);
-      const corretas = normalizarIndicesCorretas(item.corretas ?? item.correta, alternativas.length);
+      let corretas = normalizarIndicesCorretas(item.corretas ?? item.correta, alternativas.length);
+      let multipla = item.multipla === true || corretas.length > 1;
+
+      if (!multipla && corretas.length > 1) {
+        corretas = [corretas[0]];
+      }
+
+      if (multipla && corretas.length === 1) {
+        multipla = item.multipla === true;
+      }
 
       return {
         enunciado: item.enunciado.trim().slice(0, 500),
         alternativas,
         corretas,
-        multipla: item.multipla === true || corretas.length > 1,
+        multipla,
       };
     })
-    .filter((pergunta) => pergunta.alternativas.length >= 2)
+    .filter((pergunta) => pergunta.alternativas.length >= 2 && pergunta.corretas.length >= 1)
     .slice(0, 10);
 }
 
@@ -455,27 +464,20 @@ function obterEstadoPerguntas(estados, indice, bloco) {
 
 function corrigirPerguntas(perguntas, selecionadas) {
   let acertos = 0;
-  let corrigiveis = 0;
   const itens = perguntas.map((pergunta, indice) => {
     const marcadas = [...(selecionadas[indice] ?? [])].sort((a, b) => a - b);
     const corretas = [...pergunta.corretas].sort((a, b) => a - b);
-    const temGabarito = corretas.length > 0;
-    let acertou = null;
+    const acertou = marcadas.length === corretas.length
+      && marcadas.every((valor, posicao) => valor === corretas[posicao]);
 
-    if (temGabarito) {
-      corrigiveis += 1;
-      acertou = marcadas.length === corretas.length
-        && marcadas.every((valor, posicao) => valor === corretas[posicao]);
-
-      if (acertou) {
-        acertos += 1;
-      }
+    if (acertou) {
+      acertos += 1;
     }
 
-    return { marcadas, corretas, acertou, temGabarito };
+    return { marcadas, corretas, acertou };
   });
 
-  return { itens, acertos, corrigiveis };
+  return { itens, acertos, total: perguntas.length };
 }
 
 function montarMensagemRespostas(perguntas, selecionadas) {
@@ -882,7 +884,7 @@ function montarCardPerguntas(bloco, estado) {
       labels[indice].forEach((label, alternativaIndice) => {
         label.classList.remove("is-correta", "is-errada");
 
-        if (!item || !item.temGabarito) {
+        if (!item) {
           return;
         }
 
@@ -893,7 +895,7 @@ function montarCardPerguntas(bloco, estado) {
         }
       });
 
-      if (!item || !item.temGabarito) {
+      if (!item) {
         feedback.hidden = true;
         feedback.textContent = "";
         feedback.className = "quiz-feedback";
@@ -920,23 +922,9 @@ function montarCardPerguntas(bloco, estado) {
     }
 
     const resumo = document.createElement("span");
-
-    if (estado.resultado.corrigiveis > 0) {
-      resumo.className = estado.resultado.acertos === estado.resultado.corrigiveis ? "ok" : "erro";
-      resumo.textContent = `Você acertou ${estado.resultado.acertos} de ${estado.resultado.corrigiveis}.`;
-    } else {
-      resumo.className = "quiz-aviso";
-      resumo.textContent = "Correção enviada para a IA.";
-    }
-
+    resumo.className = estado.resultado.acertos === estado.resultado.total ? "ok" : "erro";
+    resumo.textContent = `Você acertou ${estado.resultado.acertos} de ${estado.resultado.total}.`;
     resultado.appendChild(resumo);
-
-    if (estado.resultado.corrigiveis < bloco.perguntas.length) {
-      const aviso = document.createElement("span");
-      aviso.className = "quiz-aviso";
-      aviso.textContent = " Algumas perguntas não têm gabarito local e serão explicadas pela IA.";
-      resultado.appendChild(aviso);
-    }
   };
 
   botao.addEventListener("click", async () => {
