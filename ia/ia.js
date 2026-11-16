@@ -956,6 +956,8 @@ function montarCardPerguntas(bloco, estado) {
     const mensagem = montarMensagemRespostas(bloco.perguntas, estado.selecionadas);
     let enviado = false;
 
+    await aguardarEnvioLivre();
+
     try {
       enviado = await enviarMensagem(mensagem, { recarregar: false });
     } catch (erro) {
@@ -1605,6 +1607,14 @@ async function onSubmit(event) {
   atualizarBotaoEnviar();
 
   await enviarMensagem(text);
+}
+
+async function aguardarEnvioLivre() {
+  const inicio = Date.now();
+
+  while (state.sending && Date.now() - inicio < 120000) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 async function enviarMensagem(texto, { recarregar = true } = {}) {
