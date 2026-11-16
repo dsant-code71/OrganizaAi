@@ -205,22 +205,132 @@ function tentarExtrairTarefas(bruto) {
   return tolerante.length > 0 ? tolerante : null;
 }
 
-function extrairPlanos(texto, finalizado = false) {
+function desescaparTextoJson(valor) {
+  try {
+    return JSON.parse(`"${valor}"`);
+  } catch {
+    return valor;
+  }
+}
+
+function normalizarIndicesCorretas(valor, total) {
+  const lista = Array.isArray(valor) ? valor : [valor];
+  const indices = [];
+
+  for (const item of lista) {
+    const indice = Number(item);
+
+    if (Number.isInteger(indice) && indice >= 0 && indice < total && !indices.includes(indice)) {
+      indices.push(indice);
+    }
+  }
+
+  return indices;
+}
+
+function normalizarPerguntas(lista) {
+  return (Array.isArray(lista) ? lista : [])
+    .filter((item) => item && typeof item.enunciado === "string" && item.enunciado.trim())
+    .map((item) => {
+      const alternativas = (Array.isArray(item.alternativas) ? item.alternativas : [])
+        .filter((alternativa) => typeof alternativa === "string" && alternativa.trim())
+        .map((alternativa) => alternativa.trim().slice(0, 300))
+        .slice(0, 6);
+      const corretas = normalizarIndicesCorretas(item.corretas ?? item.correta, alternativas.length);
+
+      return {
+        enunciado: item.enunciado.trim().slice(0, 500),
+        alternativas,
+        corretas,
+        multipla: item.multipla === true || corretas.length > 1,
+      };
+    })
+    .filter((pergunta) => pergunta.alternativas.length >= 2)
+    .slice(0, 10);
+}
+
+function tentarExtrairPerguntas(bruto) {
+  const texto = String(bruto ?? "").trim();
+  const candidatos = [
+    texto,
+    texto.replace(/,\s*([}\]])/g, "$1"),
+  ];
+
+  for (const candidato of candidatos) {
+    try {
+      const dados = JSON.parse(candidato || "null");
+      const perguntas = normalizarPerguntas(dados?.perguntas);
+
+      if (perguntas.length > 0) {
+        return perguntas;
+      }
+    } catch {
+      // tenta o próximo candidato
+    }
+  }
+
+  const trechos = texto.split(/"enunciado"\s*:\s*"/).slice(1);
+  const perguntas = [];
+
+  for (const trecho of trechos) {
+    const enunciado = trecho.match(/^((?:\\.|[^"\\])*)"/);
+
+    if (!enunciado) {
+      continue;
+    }
+
+    const resto = trecho.slice(enunciado[0].length);
+    const fim = resto.search(/"enunciado"\s*:\s*"/);
+    const bloco = fim >= 0 ? resto.slice(0, fim) : resto;
+    const alternativasBrutas = bloco.match(/"alternativas"\s*:\s*\[([\s\S]*?)\]/);
+    const corretasBrutas = bloco.match(/"corretas"\s*:\s*\[([\s\S]*?)\]/);
+    const corretaBruta = bloco.match(/"correta"\s*:\s*(-?\d+)/);
+    const multiplaBruta = bloco.match(/"multipla"\s*:\s*(true|false)/);
+    const alternativas = alternativasBrutas
+      ? [...alternativasBrutas[1].matchAll(/"((?:\\.|[^"\\])*)"/g)]
+        .map((item) => desescaparTextoJson(item[1]))
+      : [];
+    const corretas = corretasBrutas
+      ? [...corretasBrutas[1].matchAll(/-?\d+/g)].map((item) => Number(item[0]))
+      : corretaBruta
+        ? [Number(corretaBruta[1])]
+        : [];
+
+    perguntas.push({
+      enunciado: desescaparTextoJson(enunciado[1]),
+      alternativas,
+      corretas,
+      multipla: multiplaBruta ? multiplaBruta[1] === "true" : false,
+    });
+  }
+
+  const normalizadas = normalizarPerguntas(perguntas);
+  return normalizadas.length > 0 ? normalizadas : null;
+}
+
+function extrairBlocos(texto, finalizado = false) {
   const linhas = String(texto ?? "").split("\n");
   const corpoLinhas = [];
   const planos = [];
+  const perguntas = [];
   let emCodigo = false;
-  let emPlano = false;
-  let bufferPlano = null;
-  let placeholder = false;
+  let bloco = null;
+  let placeholderTipo = null;
 
-  // O bloco plano nunca é exibido como código: JSON válido vira card;
-  // inválido/truncado tenta recuperação tolerante e, se não der, é descartado.
-  const registrarPlano = (bruto) => {
-    const itens = tentarExtrairTarefas(bruto);
+  const registrar = (tipo, bruto) => {
+    if (tipo === "plano") {
+      const itens = tentarExtrairTarefas(bruto);
+
+      if (itens && itens.length > 0) {
+        planos.push({ tarefas: itens });
+      }
+      return;
+    }
+
+    const itens = tentarExtrairPerguntas(bruto);
 
     if (itens && itens.length > 0) {
-      planos.push({ tarefas: itens });
+      perguntas.push({ perguntas: itens });
     }
   };
 
@@ -228,13 +338,12 @@ function extrairPlanos(texto, finalizado = false) {
     const trimmed = linha.trim();
     const eCerca = trimmed.startsWith("```");
 
-    if (emPlano) {
+    if (bloco) {
       if (eCerca) {
-        registrarPlano(bufferPlano.join("\n"));
-        emPlano = false;
-        bufferPlano = null;
+        registrar(bloco.tipo, bloco.linhas.join("\n"));
+        bloco = null;
       } else {
-        bufferPlano.push(linha);
+        bloco.linhas.push(linha);
       }
     } else if (emCodigo) {
       corpoLinhas.push(linha);
@@ -244,9 +353,8 @@ function extrairPlanos(texto, finalizado = false) {
     } else if (eCerca) {
       const linguagem = trimmed.slice(3).trim().toLowerCase();
 
-      if (linguagem === "plano") {
-        emPlano = true;
-        bufferPlano = [];
+      if (linguagem === "plano" || linguagem === "perguntas") {
+        bloco = { tipo: linguagem, linhas: [] };
       } else {
         emCodigo = true;
         corpoLinhas.push(linha);
@@ -256,15 +364,15 @@ function extrairPlanos(texto, finalizado = false) {
     }
   }
 
-  if (emPlano && bufferPlano) {
+  if (bloco) {
     if (finalizado) {
-      registrarPlano(bufferPlano.join("\n"));
+      registrar(bloco.tipo, bloco.linhas.join("\n"));
     } else {
-      placeholder = true;
+      placeholderTipo = bloco.tipo;
     }
   }
 
-  return { corpo: corpoLinhas.join("\n"), planos, placeholder };
+  return { corpo: corpoLinhas.join("\n"), planos, perguntas, placeholderTipo };
 }
 
 function obterEstadoPlano(estados, indice, plano) {
@@ -289,6 +397,87 @@ function obterEstadoPlano(estados, indice, plano) {
   }
 
   return novo;
+}
+
+function assinaturaPerguntas(perguntas) {
+  return perguntas.map((pergunta) => pergunta.enunciado).join("\u0001");
+}
+
+function obterEstadoPerguntas(estados, indice, bloco) {
+  const assinatura = assinaturaPerguntas(bloco.perguntas);
+
+  if (estados) {
+    const existente = estados.get(indice);
+
+    if (existente && existente.assinatura === assinatura) {
+      return existente;
+    }
+  }
+
+  const novo = {
+    assinatura,
+    selecionadas: bloco.perguntas.map(() => new Set()),
+    resultado: null,
+    enviado: false,
+    enviando: false,
+  };
+
+  if (estados) {
+    estados.set(indice, novo);
+  }
+
+  return novo;
+}
+
+function corrigirPerguntas(perguntas, selecionadas) {
+  let acertos = 0;
+  let corrigiveis = 0;
+  const itens = perguntas.map((pergunta, indice) => {
+    const marcadas = [...(selecionadas[indice] ?? [])].sort((a, b) => a - b);
+    const corretas = [...pergunta.corretas].sort((a, b) => a - b);
+    const temGabarito = corretas.length > 0;
+    let acertou = null;
+
+    if (temGabarito) {
+      corrigiveis += 1;
+      acertou = marcadas.length === corretas.length
+        && marcadas.every((valor, posicao) => valor === corretas[posicao]);
+
+      if (acertou) {
+        acertos += 1;
+      }
+    }
+
+    return { marcadas, corretas, acertou, temGabarito };
+  });
+
+  return { itens, acertos, corrigiveis };
+}
+
+function montarMensagemRespostas(perguntas, selecionadas) {
+  const linhas = ["Respondi às perguntas:", ""];
+
+  perguntas.forEach((pergunta, indice) => {
+    linhas.push(`${indice + 1}. ${pergunta.enunciado}`);
+    linhas.push("Alternativas marcadas:");
+    const marcadas = [...(selecionadas[indice] ?? [])]
+      .sort((a, b) => a - b)
+      .map((alternativaIndice) => pergunta.alternativas[alternativaIndice])
+      .filter(Boolean);
+
+    if (marcadas.length > 0) {
+      for (const alternativa of marcadas) {
+        linhas.push(`- ${alternativa}`);
+      }
+    } else {
+      linhas.push("- Sem resposta");
+    }
+
+    linhas.push("");
+  });
+
+  linhas.push("Corrija minhas respostas, diga quais estão certas ou erradas e explique o porquê.");
+  return linhas.join("\n");
 }
 
 async function adicionarTarefasDoPlano(itens) {
@@ -516,19 +705,284 @@ function montarCardPlano(plano, estado) {
   return card;
 }
 
-function renderizarConteudoAssistant(bubble, texto, estadosPlano = null, finalizado = false) {
-  const { corpo, planos, placeholder } = extrairPlanos(texto, finalizado);
+function montarCardPerguntas(bloco, estado) {
+  const card = document.createElement("div");
+  card.className = "quiz-card";
+
+  const cabecalho = document.createElement("div");
+  cabecalho.className = "quiz-cabecalho";
+
+  const icone = criarIcone("circle-help");
+  if (icone) {
+    cabecalho.appendChild(icone);
+  }
+
+  const titulo = document.createElement("span");
+  titulo.textContent = "Perguntas de estudo";
+  cabecalho.appendChild(titulo);
+
+  const contador = document.createElement("span");
+  contador.className = "quiz-contador";
+  cabecalho.appendChild(contador);
+  card.appendChild(cabecalho);
+
+  const lista = document.createElement("div");
+  lista.className = "quiz-lista";
+
+  const labels = [];
+  const feedbacks = [];
+  const todosCheckboxes = [];
+
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "quiz-botao";
+
+  const iconeBotao = criarIcone("send");
+  if (iconeBotao) {
+    botao.appendChild(iconeBotao);
+  }
+
+  const textoBotao = document.createElement("span");
+  botao.appendChild(textoBotao);
+
+  const resultado = document.createElement("div");
+  resultado.className = "quiz-resultado";
+
+  const atualizarContador = () => {
+    const respondidas = estado.selecionadas.reduce(
+      (total, selecionadas) => total + (selecionadas.size > 0 ? 1 : 0),
+      0,
+    );
+    contador.textContent = `${respondidas}/${bloco.perguntas.length} respondidas`;
+  };
+
+  const atualizarBotao = () => {
+    const respondidas = estado.selecionadas.reduce(
+      (total, selecionadas) => total + (selecionadas.size > 0 ? 1 : 0),
+      0,
+    );
+
+    if (estado.enviado) {
+      textoBotao.textContent = "Respostas enviadas";
+    } else if (estado.enviando) {
+      textoBotao.textContent = "Enviando...";
+    } else {
+      textoBotao.textContent = "Enviar respostas";
+    }
+
+    const bloqueado = estado.enviado || estado.enviando;
+    botao.disabled = bloqueado || respondidas === 0;
+
+    for (const checkbox of todosCheckboxes) {
+      checkbox.disabled = bloqueado;
+    }
+  };
+
+  bloco.perguntas.forEach((pergunta, indice) => {
+    const item = document.createElement("div");
+    item.className = "quiz-pergunta";
+
+    const enunciado = document.createElement("div");
+    enunciado.className = "quiz-enunciado";
+    enunciado.textContent = `${indice + 1}. ${pergunta.enunciado}`;
+    item.appendChild(enunciado);
+
+    const alternativas = document.createElement("div");
+    alternativas.className = "quiz-alternativas";
+    const labelsPergunta = [];
+    const checks = [];
+
+    pergunta.alternativas.forEach((textoAlternativa, alternativaIndice) => {
+      const label = document.createElement("label");
+      label.className = "quiz-alternativa";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = estado.selecionadas[indice].has(alternativaIndice);
+      checkbox.disabled = estado.enviado || estado.enviando;
+      checkbox.addEventListener("change", () => {
+        if (estado.enviado || estado.enviando) {
+          return;
+        }
+
+        if (checkbox.checked) {
+          if (!pergunta.multipla) {
+            estado.selecionadas[indice].clear();
+            checks.forEach((outro) => {
+              if (outro !== checkbox) {
+                outro.checked = false;
+              }
+            });
+          }
+
+          estado.selecionadas[indice].add(alternativaIndice);
+        } else {
+          estado.selecionadas[indice].delete(alternativaIndice);
+        }
+
+        atualizarContador();
+        atualizarBotao();
+      });
+
+      const texto = document.createElement("span");
+      texto.className = "quiz-alternativa-texto";
+      texto.textContent = textoAlternativa;
+
+      label.append(checkbox, texto);
+      alternativas.appendChild(label);
+      labelsPergunta.push(label);
+      checks.push(checkbox);
+      todosCheckboxes.push(checkbox);
+    });
+
+    const feedback = document.createElement("div");
+    feedback.className = "quiz-feedback";
+    feedback.hidden = true;
+
+    item.append(alternativas, feedback);
+    lista.appendChild(item);
+    labels.push(labelsPergunta);
+    feedbacks.push(feedback);
+  });
+
+  card.appendChild(lista);
+
+  const renderizarResultado = () => {
+    resultado.replaceChildren();
+    resultado.className = "quiz-resultado";
+
+    bloco.perguntas.forEach((pergunta, indice) => {
+      const item = estado.resultado?.itens?.[indice];
+      const feedback = feedbacks[indice];
+
+      labels[indice].forEach((label, alternativaIndice) => {
+        label.classList.remove("is-correta", "is-errada");
+
+        if (!item || !item.temGabarito) {
+          return;
+        }
+
+        if (item.corretas.includes(alternativaIndice)) {
+          label.classList.add("is-correta");
+        } else if (item.marcadas.includes(alternativaIndice)) {
+          label.classList.add("is-errada");
+        }
+      });
+
+      if (!item || !item.temGabarito) {
+        feedback.hidden = true;
+        feedback.textContent = "";
+        feedback.className = "quiz-feedback";
+        return;
+      }
+
+      feedback.hidden = false;
+      feedback.className = "quiz-feedback " + (item.acertou ? "ok" : "erro");
+
+      if (item.acertou) {
+        feedback.textContent = "Correta.";
+      } else {
+        const corretas = item.corretas
+          .map((alternativaIndice) => pergunta.alternativas[alternativaIndice])
+          .filter(Boolean);
+        feedback.textContent = corretas.length > 0
+          ? `Incorreta. ${corretas.length > 1 ? "Respostas corretas" : "Resposta correta"}: ${corretas.join("; ")}`
+          : "Incorreta.";
+      }
+    });
+
+    if (!estado.resultado) {
+      return;
+    }
+
+    const resumo = document.createElement("span");
+
+    if (estado.resultado.corrigiveis > 0) {
+      resumo.className = estado.resultado.acertos === estado.resultado.corrigiveis ? "ok" : "erro";
+      resumo.textContent = `Você acertou ${estado.resultado.acertos} de ${estado.resultado.corrigiveis}.`;
+    } else {
+      resumo.className = "quiz-aviso";
+      resumo.textContent = "Correção enviada para a IA.";
+    }
+
+    resultado.appendChild(resumo);
+
+    if (estado.resultado.corrigiveis < bloco.perguntas.length) {
+      const aviso = document.createElement("span");
+      aviso.className = "quiz-aviso";
+      aviso.textContent = " Algumas perguntas não têm gabarito local e serão explicadas pela IA.";
+      resultado.appendChild(aviso);
+    }
+  };
+
+  botao.addEventListener("click", async () => {
+    if (estado.enviado || estado.enviando) {
+      return;
+    }
+
+    estado.enviando = true;
+    atualizarBotao();
+    estado.resultado = corrigirPerguntas(bloco.perguntas, estado.selecionadas);
+    estado.enviado = true;
+    estado.enviando = false;
+    renderizarResultado();
+    atualizarContador();
+    atualizarBotao();
+
+    const mensagem = montarMensagemRespostas(bloco.perguntas, estado.selecionadas);
+    let enviado = false;
+
+    try {
+      enviado = await enviarMensagem(mensagem, { recarregar: false });
+    } catch (erro) {
+      console.error("Não foi possível enviar as respostas para a IA.", erro);
+    }
+
+    if (!enviado) {
+      const aviso = document.createElement("div");
+      aviso.className = "quiz-resultado-erro";
+      aviso.textContent = "Respostas corrigidas localmente, mas não foi possível enviar a explicação para a IA.";
+      card.appendChild(aviso);
+    }
+  });
+
+  const rodape = document.createElement("div");
+  rodape.className = "quiz-rodape";
+  rodape.append(resultado, botao);
+  card.appendChild(rodape);
+
+  atualizarContador();
+  atualizarBotao();
+  renderizarResultado();
+
+  return card;
+}
+
+function renderizarConteudoAssistant(
+  bubble,
+  texto,
+  estadosPlano = null,
+  estadosPerguntas = null,
+  finalizado = false,
+) {
+  const { corpo, planos, perguntas, placeholderTipo } = extrairBlocos(texto, finalizado);
   bubble.innerHTML = renderMarkdown(corpo);
 
-  if (placeholder) {
+  if (placeholderTipo) {
     const aviso = document.createElement("div");
     aviso.className = "plano-loading";
-    aviso.textContent = "Montando plano de estudos…";
+    aviso.textContent = placeholderTipo === "perguntas"
+      ? "Montando perguntas…"
+      : "Montando plano de estudos…";
     bubble.appendChild(aviso);
   }
 
   planos.forEach((plano, indice) => {
     bubble.appendChild(montarCardPlano(plano, obterEstadoPlano(estadosPlano, indice, plano)));
+  });
+
+  perguntas.forEach((bloco, indice) => {
+    bubble.appendChild(montarCardPerguntas(bloco, obterEstadoPerguntas(estadosPerguntas, indice, bloco)));
   });
 }
 
@@ -901,7 +1355,7 @@ function appendMessage(role, text) {
   bubble.className = "bubble";
 
   if (role === "assistant") {
-    renderizarConteudoAssistant(bubble, text, null, true);
+    renderizarConteudoAssistant(bubble, text, null, null, true);
   } else {
     bubble.textContent = text;
   }
@@ -973,6 +1427,7 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
   let hasContent = false;
   let truncationReason = "";
   let estadosPlano = new Map();
+  let estadosPerguntas = new Map();
 
   const removeTyping = () => {
     if (typingRow && typingRow.isConnected) {
@@ -991,9 +1446,10 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
     assistantBubble = appendMessage("assistant", "");
     accumulated = prefix;
     estadosPlano = new Map();
+    estadosPerguntas = new Map();
 
     if (prefix) {
-      renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano);
+      renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, estadosPerguntas);
     }
   };
 
@@ -1002,7 +1458,7 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
       return;
     }
 
-    renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, true);
+    renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, estadosPerguntas, true);
 
     const content = accumulated.trim();
 
@@ -1037,7 +1493,7 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
         }
 
         accumulated += delta;
-        renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano);
+        renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, estadosPerguntas);
         scrollToBottom();
       },
       onSegmentEnd: ({ continue: willContinue }) => {
@@ -1119,11 +1575,25 @@ async function onSubmit(event) {
     return;
   }
 
+  el.messageInput.value = "";
+  autoGrow();
+  atualizarBotaoEnviar();
+
+  await enviarMensagem(text);
+}
+
+async function enviarMensagem(texto, { recarregar = true } = {}) {
+  const text = String(texto ?? "").trim();
+
+  if (!text || state.sending || (AUTH_ENABLED && !state.session)) {
+    return false;
+  }
+
   let conversationId = state.currentId;
   if (!conversationId) {
     conversationId = await createConversation();
     if (!conversationId) {
-      return;
+      return false;
     }
   }
 
@@ -1138,19 +1608,28 @@ async function onSubmit(event) {
     salvarMensagemLocal(conversationId, "user", text);
   }
 
-  el.messageInput.value = "";
-  autoGrow();
   setSending(true);
-
   appendMessage("user", text);
 
   try {
     await runAssistantReply(conversationId, text, false, precisaTitulo);
   } finally {
     setSending(false);
-    el.messageInput.focus();
-    await loadConversations();
+
+    if (recarregar) {
+      el.messageInput.focus();
+      await loadConversations();
+    } else {
+      if (!AUTH_ENABLED) {
+        state.conversations.sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+        );
+      }
+      renderConversations();
+    }
   }
+
+  return true;
 }
 
 async function streamReply(conversationId, content, handlers = {}, isRetry = false, needsTitle = false) {
