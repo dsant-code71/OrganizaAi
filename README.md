@@ -155,6 +155,12 @@ O site é estático e publicado pela Vercel a partir do GitHub
   esse bloco como um card interativo (tópicos, prioridades e seleção) que
   cria as tarefas na lista do OrganizAI — direto no `tasks` via Supabase no
   modo autenticado, ou na mesma chave de `localStorage` do modo visitante.
+- Quando o aluno pede perguntas, exercícios ou um quiz, a IA anexa um bloco
+  ```perguntas com JSON
+  (`{"versao":1,"perguntas":[{"enunciado","alternativas","corretas","multipla"}]}`).
+  O EstudAI renderiza checkboxes por alternativa, corrige localmente usando
+  os índices de `corretas` após o envio e manda as respostas para a IA
+  explicar acertos e erros. O gabarito nunca aparece fora do bloco JSON.
 - A cadeia é configurável:
 
 ```bash

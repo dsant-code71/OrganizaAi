@@ -238,6 +238,20 @@ Em bancos existentes, `0003` aplica a limpeza.
   houver itens recuperáveis, o bloco é descartado silenciosamente. Fence
   ainda aberta durante o streaming mostra
   "Montando plano de estudos…".
+- Perguntas de estudo: pedidos de perguntas, exercícios ou quiz fazem a IA
+  anexar um bloco ```perguntas com JSON
+  (`{"versao":1,"perguntas":[{"enunciado","alternativas","corretas","multipla"}]}`).
+  O `ia/ia.js` extrai o bloco no mesmo parser de `plano`, renderiza um card
+  com checkboxes por alternativa e, ao enviar, corrige localmente comparando
+  as marcações com os índices de `corretas`: alternativas corretas ficam em
+  verde, erradas em vermelho e o card mostra o resumo de acertos. Em seguida,
+  as respostas marcadas são enviadas como mensagem de usuário para a IA
+  explicar cada acerto/erro usando o bloco presente no histórico. Com
+  `multipla: false`, o card permite apenas uma marcação por pergunta. Se o
+  gabarito estiver ausente ou inválido, a correção local é omitida e a
+  explicação fica apenas com a IA. O JSON nunca é exibido no chat; blocos
+  inválidos/truncados são descartados ou recuperados de forma tolerante, e
+  uma fence aberta durante o streaming mostra "Montando perguntas…".
 
 ## 10. Execução local
 
