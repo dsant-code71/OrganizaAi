@@ -144,6 +144,30 @@ function renderMarkdown(text) {
   return template.innerHTML;
 }
 
+const PADROES_ERRO_CRU = [
+  /cannot read (?:the )?["']?clipboard/i,
+  /clipboard is not defined/i,
+  /does not support image input/i,
+  /image input is not supported/i,
+  /this model does not support image/i,
+];
+
+function normalizarErroVisivel(texto) {
+  const conteudo = String(texto ?? "");
+  const linhas = conteudo.split("\n");
+  let alterado = false;
+  const resultado = linhas.map((linha) => {
+    if (PADROES_ERRO_CRU.some((padrao) => padrao.test(linha))) {
+      alterado = true;
+      return "Não consigo visualizar imagens neste modelo. Descreva ou cole o conteúdo em texto.";
+    }
+
+    return linha;
+  });
+
+  return alterado ? resultado.join("\n") : conteudo;
+}
+
 /* ---------------- Plano de estudos → tarefas OrganizAI ---------------- */
 
 // Mesma chave usada por assets/js/todolist.js (organizaai.tarefas.visitante.v1).
@@ -1355,7 +1379,7 @@ function appendMessage(role, text) {
   bubble.className = "bubble";
 
   if (role === "assistant") {
-    renderizarConteudoAssistant(bubble, text, null, null, true);
+    renderizarConteudoAssistant(bubble, normalizarErroVisivel(text), null, null, true);
   } else {
     bubble.textContent = text;
   }
@@ -1458,9 +1482,10 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
       return;
     }
 
-    renderizarConteudoAssistant(assistantBubble, accumulated, estadosPlano, estadosPerguntas, true);
+    const conteudoFinal = normalizarErroVisivel(accumulated);
+    renderizarConteudoAssistant(assistantBubble, conteudoFinal, estadosPlano, estadosPerguntas, true);
 
-    const content = accumulated.trim();
+    const content = conteudoFinal.trim();
 
     if (content) {
       hasContent = true;
