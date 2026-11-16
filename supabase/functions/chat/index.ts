@@ -1081,7 +1081,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                 if (!isGuest && supabase) {
                   const { error: titleError } = await supabase
                     .from("conversations")
-                    .update({ title })
+                    .update({ title: titulo })
                     .eq("id", conversationId);
 
                   if (titleError) {
