@@ -53,11 +53,13 @@ supabase/
   migrations/0001_init.sql
   migrations/0002_ai_chat.sql
   migrations/0003_remove_legacy.sql
+  migrations/0004_chat_rate_limit.sql
   functions/chat/index.ts
 docs/
   DOCUMENTACAO.md
   historico/tarefas.md
   historico/ref-js.md
+vercel.json
 ```
 
 `docs/historico/tarefas.md` e `docs/historico/ref-js.md` são materiais didáticos históricos. A
@@ -192,6 +194,13 @@ Schema histórico com perfis, tarefas, checklist, máquinas, auditoria e papéis
 - Remove o tipo `app_role`.
 - Recria `profiles_select` para leitura do próprio perfil.
 
+### `0004_chat_rate_limit.sql`
+
+- Cria `chat_rate_limits`, com RLS habilitado e sem policies diretas.
+- Cria `registrar_chat_request(chave, limite, janela_segundos)` como
+  `security definer`, com `search_path = public` e contagem atômica por janela.
+- Revoga `execute` de `public` e concede apenas a `anon` e `authenticated`.
+
 Em bancos novos, o schema legado é criado por `0001` e removido por `0003`.
 Em bancos existentes, `0003` aplica a limpeza.
 
@@ -293,8 +302,13 @@ Ao reativar a autenticação, aplique também as migrations com
 - Não coloque `GROQ_API_KEY`, `GEMINI_API_KEY` nem `OPENROUTER_API_KEY` no
   frontend.
 - Mantenha RLS habilitado em todas as tabelas.
-- No modo visitante, a função `chat` aceita chamadas sem JWT; use apenas para
-  uso local/pessoal. Ao reativar a auth, o fluxo autenticado volta a ser exigido.
+- No modo visitante, a função `chat` aceita chamadas sem JWT, mas valida
+  `Origin`, limita o corpo da requisição, aplica cota por IP e ignora `retry` e
+  `needsTitle`. Risco residual: o endpoint continua anônimo.
+- `ALLOWED_ORIGINS` define as origens aceitas; sem ele, valem produção e
+  localhost. `CHAT_RATE_LIMIT_MAX` (20) e `CHAT_RATE_LIMIT_WINDOW_SECONDS`
+  (3600) controlam a cota via `0004_chat_rate_limit.sql`.
+- `vercel.json` aplica CSP, `nosniff`, `Referrer-Policy` e `X-Frame-Options`.
 - Rotacione tokens e chaves expostos.
 - Revise as Redirect URLs ao trocar de domínio.
 - Não desative `is_ativo()` nas policies de dados.

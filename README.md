@@ -73,11 +73,13 @@ supabase/
   migrations/0001_init.sql         Schema histórico (perfis/tarefas)
   migrations/0002_ai_chat.sql      Conversas/mensagens + trigger de perfil
   migrations/0003_remove_legacy.sql Limpeza de checklist/admin/CPF/papéis
+  migrations/0004_chat_rate_limit.sql Limite de uso da função chat
   functions/chat/index.ts          Proxy autenticado para IA (Groq/Gemini/OpenRouter)
 docs/
   DOCUMENTACAO.md                  Documentação técnica atual
   historico/tarefas.md             Material didático histórico
   historico/ref-js.md              Referência didática histórica
+vercel.json                        Headers de segurança (CSP, nosniff, Referrer-Policy)
 ```
 
 ## Reativar autenticação Google
@@ -187,9 +189,28 @@ npx supabase secrets set GEMINI_MODEL=gemini-3.5-flash-lite --project-ref zuucmc
 - A `publishable key` é pública por design; a proteção vem do RLS.
 - As chaves `GROQ_API_KEY`, `GEMINI_API_KEY` e `OPENROUTER_API_KEY` ficam
   apenas nos secrets do Supabase.
-- No modo visitante, a função `chat` aceita chamadas sem JWT (`guest: true`).
-  Use esse modo apenas para uso local/pessoal; ao reativar a auth, o fluxo
-  autenticado volta a ser exigido.
+- No modo visitante, a função `chat` aceita chamadas sem JWT (`guest: true`),
+  mas exige `Origin` permitido, aplica limite de uso por IP e não aceita
+  `retry`/`needsTitle` do cliente. Risco residual: o endpoint continua anônimo.
+- A função responde apenas a origens listadas em `ALLOWED_ORIGINS` (separadas
+  por vírgula; padrão: produção + localhost). Configure com:
+
+```bash
+npx supabase secrets set ALLOWED_ORIGINS="https://organizai-dsant.vercel.app,http://localhost:3000,http://127.0.0.1:8765" --project-ref zuucmcmaexwvxypsgfks
+```
+
+- O limite padrão é 20 requisições por hora por IP (`CHAT_RATE_LIMIT_MAX` e
+  `CHAT_RATE_LIMIT_WINDOW_SECONDS`). Aplique a migration antes de publicar a
+  função:
+
+```bash
+npx supabase db push
+npx supabase functions deploy chat --project-ref zuucmcmaexwvxypsgfks
+```
+
+- `vercel.json` adiciona CSP, `X-Content-Type-Options`, `Referrer-Policy` e
+  `X-Frame-Options`. CDNs são fixados com SRI; `marked` e `DOMPurify` vêm de
+  `esm.sh` com versão fixa.
 - Rotacione tokens e chaves que tenham sido compartilhados.
 - Perfis inativos são bloqueados no frontend e pelas policies do banco.
 

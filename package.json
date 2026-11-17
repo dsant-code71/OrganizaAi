@@ -9,6 +9,6 @@
     "db:push": "supabase db push"
   },
   "devDependencies": {
-    "supabase": "^2.0.0"
+    "supabase": "^3.2.0"
   }
 }

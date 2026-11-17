@@ -1,10 +1,36 @@
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.119.0";
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://organizai-dsant.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:8765",
+];
+
+function allowedOrigins(): string[] {
+  const raw = Deno.env.get("ALLOWED_ORIGINS");
+
+  if (!raw) {
+    return DEFAULT_ALLOWED_ORIGINS;
+  }
+
+  return raw.split(",").map((origin) => origin.trim()).filter(Boolean);
+}
+
+function corsHeaders(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+  const origin = req.headers.get("Origin") ?? "";
+
+  if (origin && allowedOrigins().includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+
+  return headers;
+}
 
 type Provider = "gemini" | "groq" | "openrouter" | "deepseek";
 type Candidate = { provider: Provider; model: string };
@@ -22,6 +48,7 @@ type OpenUpstreamResult =
   | { ok: false; quotaExceeded: boolean; detail: string };
 
 const MAX_INPUT_CHARS = 4000;
+const MAX_BODY_BYTES = 32 * 1024;
 const MAX_HISTORY_MESSAGES = 20;
 const FETCH_TIMEOUT_MS = 30000;
 const STREAM_IDLE_TIMEOUT_MS = 45000;
@@ -85,6 +112,8 @@ const CONTINUATION_MARKER = "[[CONTINUE]]";
 const CONTINUE_INSTRUCTION =
   "Continue exatamente de onde a resposta anterior parou, sem repetir o conteúdo já escrito. Mantenha a mesma formatação em Markdown. Não escreva o marcador [[CONTINUE]] se a resposta estiver completa.";
 const MAX_HISTORY_CHARS = envInt("AI_HISTORY_MAX_CHARS", 6000, 1000, 20000);
+const RATE_LIMIT_MAX = envInt("CHAT_RATE_LIMIT_MAX", 20, 1, 1000);
+const RATE_LIMIT_WINDOW_SECONDS = envInt("CHAT_RATE_LIMIT_WINDOW_SECONDS", 3600, 60, 86400);
 const TITLE_MAX_TOKENS = 32;
 const TITLE_MAX_CHARS = 60;
 const TITLE_INPUT_CHARS = 300;
@@ -93,11 +122,48 @@ const GROQ_REASONING_EFFORT_RAW = Deno.env.get("GROQ_REASONING_EFFORT")?.trim().
 const GROQ_REASONING_EFFORT = GROQ_REASONING_EFFORT_RAW ?? "low";
 const GROQ_QWEN_REASONING_EFFORT = GROQ_REASONING_EFFORT_RAW ?? "none";
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+async function hashKey(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 32);
+}
+
+async function allowsRequest(
+  supabaseUrl: string | undefined,
+  anonKey: string | undefined,
+  chave: string,
+): Promise<boolean> {
+  if (!supabaseUrl || !anonKey) {
+    return false;
+  }
+
+  const db = createClient(supabaseUrl, anonKey);
+  const { data, error } = await db.rpc("registrar_chat_request", {
+    p_chave: chave,
+    p_limite: RATE_LIMIT_MAX,
+    p_janela_segundos: RATE_LIMIT_WINDOW_SECONDS,
+  });
+
+  if (error) {
+    console.error("Erro ao aplicar limite de uso:", error.message);
+    return false;
+  }
+
+  return data === true;
 }
 
 function sse(data: unknown): string {
@@ -356,23 +422,10 @@ function buildGeminiRequest(
 }
 
 function buildProviderMessages(
-  provider: Exclude<Provider, "gemini">,
+  _provider: Exclude<Provider, "gemini">,
   messages: ChatMessage[],
 ): ChatMessage[] {
-  if (provider !== "groq") {
-    return [{ role: "system", content: SYSTEM_INSTRUCTION }, ...messages];
-  }
-
-  const merged = messages.map((message) => ({ ...message }));
-
-  for (let index = merged.length - 1; index >= 0; index -= 1) {
-    if (merged[index].role === "user") {
-      merged[index].content = `${SYSTEM_INSTRUCTION}\n\n${merged[index].content}`;
-      break;
-    }
-  }
-
-  return merged;
+  return [{ role: "system", content: SYSTEM_INSTRUCTION }, ...messages];
 }
 
 function buildOpenAIRequest(
@@ -603,18 +656,25 @@ async function* streamOpenAI(
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const cors = corsHeaders(req);
+  const respond = (body: unknown, status = 200): Response => jsonResponse(body, status, cors);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS_HEADERS });
+    return new Response("ok", { headers: cors });
+  }
+
+  if (!allowedOrigins().includes(req.headers.get("Origin") ?? "")) {
+    return respond({ error: "Origem não permitida." }, 403);
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ error: "Método não permitido." }, 405);
+    return respond({ error: "Método não permitido." }, 405);
   }
 
   const chain = resolveChain().filter((candidate) => Boolean(getProviderKey(candidate.provider)));
 
   if (chain.length === 0) {
-    return jsonResponse(
+    return respond(
       { error: "Nenhum provedor de IA configurado. Defina GEMINI_API_KEY e/ou GROQ_API_KEY nos secrets do Supabase." },
       500,
     );
@@ -632,30 +692,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
     history?: Array<{ role?: string; content?: string }>;
   };
 
+  let rawBody: string;
+
   try {
-    payload = await req.json();
+    rawBody = await req.text();
   } catch {
-    return jsonResponse({ error: "JSON inválido." }, 400);
+    return respond({ error: "Requisição inválida." }, 400);
+  }
+
+  if (rawBody.length > MAX_BODY_BYTES) {
+    return respond({ error: "Requisição muito grande." }, 413);
+  }
+
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return respond({ error: "JSON inválido." }, 400);
   }
 
   if (!payload || typeof payload !== "object") {
-    return jsonResponse({ error: "JSON inválido." }, 400);
+    return respond({ error: "JSON inválido." }, 400);
   }
 
   const isGuest = payload.guest === true;
-  const content = (payload.content ?? "").trim();
-  const isRetry = payload.retry === true;
+  const content = typeof payload.content === "string" ? payload.content.trim() : "";
+  const isRetry = !isGuest && payload.retry === true;
 
   if (!content) {
-    return jsonResponse({ error: "Mensagem vazia." }, 400);
+    return respond({ error: "Mensagem vazia." }, 400);
   }
 
   if (content.length > MAX_INPUT_CHARS) {
-    return jsonResponse({ error: `Mensagem muito longa (máx. ${MAX_INPUT_CHARS} caracteres).` }, 400);
+    return respond({ error: `Mensagem muito longa (máx. ${MAX_INPUT_CHARS} caracteres).` }, 400);
   }
 
   let supabase: SupabaseClient | null = null;
   let conversationId = "";
+  let userId = "";
   let history: ChatMessage[] = [];
   let skipUserInsert = false;
   let shouldGenerateTitle = false;
@@ -665,12 +738,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     history.some((message) => message.role === "assistant" && message.content.trim().length > 0);
 
   if (isGuest) {
-    const historico = Array.isArray(payload.history) ? payload.history : [];
+    const historico = Array.isArray(payload.history)
+      ? payload.history.slice(0, MAX_HISTORY_MESSAGES)
+      : [];
+
     history = historico
       .filter((message) =>
         message
         && (message.role === "user" || message.role === "assistant")
         && typeof message.content === "string"
+        && message.content.length <= MAX_HISTORY_CHARS
       )
       .slice(-MAX_HISTORY_MESSAGES)
       .map((message) => ({
@@ -678,16 +755,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
         content: message.content as string,
       }));
 
-    shouldGenerateTitle = payload.needsTitle === true && !hasAssistantHistory();
+    shouldGenerateTitle = false;
   } else {
     if (!supabaseUrl || !anonKey) {
-      return jsonResponse({ error: "Servidor não configurado." }, 500);
+      return respond({ error: "Servidor não configurado." }, 500);
     }
 
     const authHeader = req.headers.get("Authorization") ?? "";
 
     if (!authHeader) {
-      return jsonResponse({ error: "Não autenticado." }, 401);
+      return respond({ error: "Não autenticado." }, 401);
     }
 
     const db = createClient(supabaseUrl, anonKey, {
@@ -698,13 +775,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { data: userData, error: userError } = await db.auth.getUser();
 
     if (userError || !userData?.user) {
-      return jsonResponse({ error: "Sessão inválida." }, 401);
+      return respond({ error: "Sessão inválida." }, 401);
     }
 
-    conversationId = (payload.conversationId ?? "").trim();
+    userId = userData.user.id;
+    conversationId = typeof payload.conversationId === "string" ? payload.conversationId.trim() : "";
 
     if (!conversationId) {
-      return jsonResponse({ error: "conversationId é obrigatório." }, 400);
+      return respond({ error: "conversationId é obrigatório." }, 400);
     }
 
     const { data: conversation, error: conversationError } = await db
@@ -714,7 +792,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     if (conversationError || !conversation) {
-      return jsonResponse({ error: "Conversa não encontrada." }, 404);
+      return respond({ error: "Conversa não encontrada." }, 404);
     }
 
     const { data: historyDesc } = await db
@@ -739,9 +817,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
 
       if (insertUserError) {
-        return jsonResponse({ error: "Não foi possível salvar a mensagem." }, 500);
+        return respond({ error: "Não foi possível salvar a mensagem." }, 500);
       }
     }
+  }
+
+  const forwardedFor = req.headers.get("x-forwarded-for") ?? "";
+  const clientIp = forwardedFor.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+  const rateKey = isGuest
+    ? `guest:${await hashKey(clientIp)}`
+    : `user:${userId}`;
+
+  if (!await allowsRequest(supabaseUrl, anonKey, rateKey)) {
+    return respond({ error: "Limite de uso atingido. Tente novamente mais tarde." }, 429);
   }
 
   const pending: ChatMessage[] = history.map((message) => ({
@@ -847,17 +937,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (!initial.ok) {
     if (initial.quotaExceeded) {
-      return jsonResponse(
+      return respond(
         { error: "Limite de uso da IA atingido em todos os provedores. Tente novamente mais tarde." },
         429,
       );
     }
 
-    return jsonResponse(
-      {
-        error: "Não consegui falar com a IA agora. Tente novamente em instantes.",
-        detail: initial.detail.slice(0, 300),
-      },
+    console.error("Erro ao abrir upstream:", initial.detail.slice(0, 300));
+
+    return respond(
+      { error: "Não consegui falar com a IA agora. Tente novamente em instantes." },
       502,
     );
   }
@@ -1044,9 +1133,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
             );
 
             if (!titleRequest.ok) {
-              controller.enqueue(encoder.encode(
-                sse({ titleFail: `upstream: ${titleRequest.quotaExceeded ? "quota" : "erro"} ${titleRequest.detail.slice(0, 300)}` }),
-              ));
+              console.error(
+                "Erro ao gerar título:",
+                titleRequest.quotaExceeded ? "quota" : titleRequest.detail.slice(0, 300),
+              );
+              controller.enqueue(encoder.encode(sse({ titleFail: "upstream" })));
             }
 
             if (titleRequest.ok && titleRequest.upstream.body) {
@@ -1091,16 +1182,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
                 controller.enqueue(encoder.encode(sse({ title: titulo })));
               } else {
-                controller.enqueue(encoder.encode(
-                  sse({ titleFail: `sanitize: bruto=${JSON.stringify(tituloBruto.slice(0, 120))} limpo=${JSON.stringify(titulo)}` }),
-                ));
+                console.error("Título inválido:", tituloBruto.slice(0, 120));
+                controller.enqueue(encoder.encode(sse({ titleFail: "sanitize" })));
               }
             }
           } catch (error) {
             console.error("Erro ao gerar título:", error);
-            controller.enqueue(encoder.encode(
-              sse({ titleFail: `exception: ${String(error).slice(0, 300)}` }),
-            ));
+            controller.enqueue(encoder.encode(sse({ titleFail: "exception" })));
           }
         }
 
@@ -1139,7 +1227,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   return new Response(stream, {
     headers: {
-      ...CORS_HEADERS,
+      ...cors,
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
