@@ -30,19 +30,24 @@ CPF ou auditoria. O login por e-mail/senha foi removido.
 index.html
 login.html
 assets/
+  img/favicon.svg
+  img/favicon-32.png
+  img/apple-touch-icon.png
+  css/base.css
   css/auth.css
   css/todolist.css
+  css/ia.css
   js/app-config.js
-  js/auth.js
-  js/login.js
-  js/supabase-config.js
-  js/theme.js
-  js/todolist.js
+  js/core/supabase-config.js
+  js/core/icons.js
+  js/core/theme.js
+  js/auth/auth.js
+  js/auth/login.js
+  js/todo/todolist.js
+  js/ia/ia.js
+  js/ia/config.js
 ia/
   index.html
-  ia.css
-  ia.js
-  config.js
 supabase/
   config.toml
   migrations/0001_init.sql
@@ -51,11 +56,11 @@ supabase/
   functions/chat/index.ts
 docs/
   DOCUMENTACAO.md
-  tarefas.md
-  ref-js.md
+  historico/tarefas.md
+  historico/ref-js.md
 ```
 
-`docs/tarefas.md` e `docs/ref-js.md` são materiais didáticos históricos. A
+`docs/historico/tarefas.md` e `docs/historico/ref-js.md` são materiais didáticos históricos. A
 documentação operacional atual é este arquivo.
 
 ## 4. Autenticação
@@ -90,10 +95,10 @@ window.ORGANIZAAI_AUTH_ENABLED = false;
 
 ### 4.3 Arquivos
 
-- `assets/js/app-config.js`: liga/desliga a autenticação.
-- `login.html` e `assets/js/login.js`: entrada Google e retorno do OAuth.
-- `assets/js/auth.js`: sessão, perfil, sidebar, conta e logout.
-- `ia/index.html` e `ia/ia.js`: login/sessão ou modo visitante do EstudAI.
+- `assets/js/app-config.js`: flag de autenticação, URL/key do Supabase e base URL.
+- `login.html` e `assets/js/auth/login.js`: entrada Google e retorno do OAuth.
+- `assets/js/auth/auth.js`: sessão, perfil, sidebar, conta e logout.
+- `ia/index.html` e `assets/js/ia/ia.js`: login/sessão ou modo visitante do EstudAI.
 
 ## 5. Modelo de dados
 
@@ -195,10 +200,10 @@ Em bancos existentes, `0003` aplica a limpeza.
 ### 9.1 OrganizAI
 
 - `index.html`: estrutura da lista.
-- `assets/js/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
+- `assets/js/todo/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
   tarefas. Usa `localStorage` no modo visitante ou Supabase no modo autenticado.
-- `assets/js/auth.js`: valida a sessão e monta sidebar/conta.
-- `assets/js/theme.js`: tema claro/escuro e cor dos detalhes persistidos em
+- `assets/js/auth/auth.js`: valida a sessão e monta sidebar/conta.
+- `assets/js/core/theme.js`: tema claro/escuro e cor dos detalhes persistidos em
   `localStorage` (`organizaai-tema` e `organizaai-cor-destaque`). A cor de
   destaque aceita paleta de presets ou seletor livre e recalcula os tons de
   gradiente, foco, sombra e contraste ao trocar entre claro e escuro.
@@ -206,7 +211,7 @@ Em bancos existentes, `0003` aplica a limpeza.
 ### 9.2 EstudAI
 
 - `ia/index.html`: login (modo auth) ou interface direta (modo visitante).
-- `ia/ia.js`: conversas locais ou Supabase, mensagens, streaming e Markdown
+- `assets/js/ia/ia.js`: conversas locais ou Supabase, mensagens, streaming e Markdown
   sanitizado.
 - `supabase/functions/chat/index.ts`: valida a sessão no modo autenticado ou
   aceita `guest: true` sem banco; percorre a cadeia de IA (Groq, Gemini e
@@ -227,12 +232,12 @@ Em bancos existentes, `0003` aplica a limpeza.
   `AI_SEGMENT_MAX_TOKENS`.
 - Integração EstudAI → OrganizAI: pedidos de guia/plano/cronograma de
   estudos fazem a IA anexar um bloco ```plano com JSON de tópicos. O
-  `ia/ia.js` extrai o bloco (`extrairPlanos`), renderiza um card interativo
+  `assets/js/ia/ia.js` extrai o bloco (`extrairPlanos`), renderiza um card interativo
   (checkbox por tópico, prioridade alta/média/baixa/nenhuma) e cria as
   tarefas na lista do OrganizAI: insert na tabela `tasks` (modo
   autenticado) ou escrita na chave `organizaai.tarefas.visitante.v1` do
   `localStorage` (modo visitante — a mesma chave usada por
-  `assets/js/todolist.js`). O JSON do bloco nunca é exibido no chat: JSON
+  `assets/js/todo/todolist.js`). O JSON do bloco nunca é exibido no chat: JSON
   válido vira card; inválido/truncado passa por recuperação tolerante
   (extração dos itens completos, inclusive vírgulas penduradas) e, se não
   houver itens recuperáveis, o bloco é descartado silenciosamente. Fence
@@ -244,7 +249,7 @@ Em bancos existentes, `0003` aplica a limpeza.
   Cada pergunta traz alternativas em quantidade flexível e `corretas`
   obrigatório com índice(s) válido(s) (1 índice quando `multipla:false`, 1+
   quando `multipla:true`), garantindo sempre ao menos uma alternativa correta.
-  O `ia/ia.js` extrai o bloco no mesmo parser de `plano`, renderiza um card
+  O `assets/js/ia/ia.js` extrai o bloco no mesmo parser de `plano`, renderiza um card
   com checkboxes por alternativa e, ao enviar, corrige localmente comparando
   as marcações com os índices de `corretas`: alternativas corretas ficam em
   verde, erradas em vermelho e o card mostra o resumo de acertos. Em seguida,

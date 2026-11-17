@@ -27,7 +27,7 @@ Com `false`:
 - A cor dos detalhes é escolhida em Preferências (paleta ou cor livre) e fica
   em `organizaai-cor-destaque` no `localStorage`, junto do tema.
 - O chat chama a Edge Function com `guest: true`, sem gravar no Postgres.
-- `login.html`, `auth.js`, `login.js` e as migrations continuam intactos.
+- `login.html`, `assets/js/auth/auth.js`, `assets/js/auth/login.js` e as migrations continuam intactos.
 
 Para reativar a autenticação, configure o Google no Supabase e mude a flag para
 `true`.
@@ -50,19 +50,24 @@ Navegador (index.html, login.html, ia/)
 index.html                         OrganizAI — lista de tarefas
 login.html                         Entrada com Google
 assets/
+  img/favicon.svg                  Ícone SVG
+  img/favicon-32.png               Ícone PNG 32x32
+  img/apple-touch-icon.png         Ícone iOS
+  css/base.css                     Base, variáveis e tema
   css/auth.css                     Login, sidebar, conta e tema
   css/todolist.css                 Lista de tarefas
-  js/app-config.js                 Interruptor do modo visitante/auth
-  js/auth.js                       Sessão, perfil, sidebar e logout
-  js/login.js                      Fluxo OAuth e redirecionamento
-  js/supabase-config.js            URL + publishable key
-  js/theme.js                      Tema claro/escuro e cor dos detalhes
-  js/todolist.js                   CRUD de tarefas (local ou Supabase)
+  css/ia.css                       Estilos do chat
+  js/app-config.js                 Flag de auth, Supabase e base URL
+  js/core/supabase-config.js       Cria o cliente Supabase
+  js/core/icons.js                 Ícones Lucide
+  js/core/theme.js                 Tema claro/escuro e cor dos detalhes
+  js/auth/auth.js                  Sessão, perfil, sidebar e logout
+  js/auth/login.js                 Fluxo OAuth e redirecionamento
+  js/todo/todolist.js              CRUD de tarefas (local ou Supabase)
+  js/ia/ia.js                      Conversas locais/Supabase, streaming e Markdown
+  js/ia/config.js                  Adaptador público da configuração
 ia/
   index.html                       EstudAI — login + chat
-  ia.css                           Estilos do chat
-  ia.js                            Conversas locais/Supabase, streaming e Markdown
-  config.js                        URL + chave pública + flag de auth
 supabase/
   config.toml
   migrations/0001_init.sql         Schema histórico (perfis/tarefas)
@@ -71,8 +76,8 @@ supabase/
   functions/chat/index.ts          Proxy autenticado para IA (Groq/Gemini/OpenRouter)
 docs/
   DOCUMENTACAO.md                  Documentação técnica atual
-  tarefas.md                       Material didático histórico
-  ref-js.md                        Referência didática histórica
+  historico/tarefas.md             Material didático histórico
+  historico/ref-js.md              Referência didática histórica
 ```
 
 ## Reativar autenticação Google

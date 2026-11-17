@@ -1,10 +1,7 @@
 (function () {
     'use strict';
 
-    var scriptUrl = document.currentScript && document.currentScript.src
-        ? document.currentScript.src
-        : window.location.href;
-    var baseUrl = window.organizaaiBaseUrl || new URL('../../', scriptUrl).href;
+    var baseUrl = window.organizaaiBaseUrl || (window.location.origin + '/');
     var loginUrl = new URL('login.html', baseUrl).href;
     var indexUrl = new URL('index.html', baseUrl).href;
     var iaUrl = new URL('ia/index.html', baseUrl).href;

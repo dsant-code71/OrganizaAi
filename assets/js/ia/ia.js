@@ -1,9 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { marked } from "https://esm.sh/marked@12.0.2";
 import DOMPurify from "https://esm.sh/dompurify@3.1.6";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, CHAT_FUNCTION, AUTH_ENABLED } from "./config.js";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = window.organizaaiClient;
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -170,7 +169,7 @@ function normalizarErroVisivel(texto) {
 
 /* ---------------- Plano de estudos → tarefas OrganizAI ---------------- */
 
-// Mesma chave usada por assets/js/todolist.js (organizaai.tarefas.visitante.v1).
+// Mesma chave usada por assets/js/todo/todolist.js (organizaai.tarefas.visitante.v1).
 // Alterou aqui? Altere lá também.
 const CHAVE_TAREFAS_VISITANTE = "organizaai.tarefas.visitante.v1";
 
