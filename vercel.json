@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/ia/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/organizai",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

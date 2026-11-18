@@ -4,26 +4,63 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OrganizAI · Lista de Tarefas</title>
-    <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png" />
-    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png" />
-    <script src="assets/js/app-config.js"></script>
+    <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <script src="/assets/js/app-config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous"></script>
-    <script src="assets/js/core/icons.js"></script>
-    <script src="assets/js/core/theme.js"></script>
-    <link rel="stylesheet" href="assets/css/base.css" />
-    <link rel="stylesheet" href="assets/css/todolist.css" />
-    <link rel="stylesheet" href="assets/css/auth.css" />
+    <script src="/assets/js/core/icons.js"></script>
+    <script src="/assets/js/core/app-menu.js"></script>
+    <script src="/assets/js/core/theme.js"></script>
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/todolist.css" />
+    <link rel="stylesheet" href="/assets/css/auth.css" />
   </head>
   <body>
+    <div id="appMenuBackdrop" class="app-menu-backdrop" hidden></div>
+    <aside id="appMenu" class="app-menu" aria-label="Alternar plataforma" hidden>
+      <div class="app-menu-header">
+        <span>Plataformas</span>
+        <button id="appMenuClose" type="button" class="app-menu-close" aria-label="Fechar menu">
+          <i data-icon="x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <nav class="app-menu-list">
+        <a class="app-menu-item is-current" href="/organizai" aria-current="page">
+          <span class="app-menu-avatar" aria-hidden="true">OA</span>
+          <span class="app-menu-text">
+            <strong>OrganizAI</strong>
+            <small>Tarefas e organização</small>
+          </span>
+        </a>
+        <a class="app-menu-item" href="/ia/">
+          <span class="app-menu-avatar" aria-hidden="true">EA</span>
+          <span class="app-menu-text">
+            <strong>EstudAI</strong>
+            <small>Assistente de estudos</small>
+          </span>
+        </a>
+      </nav>
+    </aside>
+
     <div id="authLoading" class="auth-loading" role="status" aria-live="polite">Carregando...</div>
 
     <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
 
     <header class="brand" aria-label="OrganizAI">
+      <button
+        id="appMenuToggle"
+        type="button"
+        class="nav-toggle"
+        aria-label="Abrir menu de plataformas"
+        aria-controls="appMenu"
+        aria-expanded="false"
+      >
+        <i data-icon="menu" aria-hidden="true"></i>
+      </button>
       <a
         class="brand-link"
-        href="ia/index.html"
+        href="/ia/"
         title="Ir para o EstudAI"
         aria-label="OrganizAI — ir para o EstudAI"
       >
@@ -58,8 +95,8 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js" integrity="sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O" crossorigin="anonymous"></script>
-    <script src="assets/js/core/supabase-config.js"></script>
-    <script src="assets/js/auth/auth.js"></script>
-    <script src="assets/js/todo/todolist.js"></script>
+    <script src="/assets/js/core/supabase-config.js"></script>
+    <script src="/assets/js/auth/auth.js"></script>
+    <script src="/assets/js/todo/todolist.js"></script>
   </body>
 </html>

@@ -3,7 +3,11 @@
 Aplicação web estática com dois módulos:
 
 - **OrganizAI**: lista de tarefas local no modo visitante ou por usuário no Supabase.
-- **EstudAI**: assistente de estudos com IA.
+- **EstudAI**: assistente de estudos com IA — **plataforma principal**.
+
+A URL raiz (`/`) redireciona para o EstudAI. O OrganizAI continua disponível em
+`/index.html` e no alias `/organizai`. O botão de menu no cabeçalho alterna
+entre os dois módulos.
 
 O fluxo de **Google OAuth** via Supabase Auth continua no projeto, mas está
 desativado por padrão. No modo atual (visitante), o app abre sem login e salva
@@ -60,6 +64,7 @@ assets/
   js/app-config.js                 Flag de auth, Supabase e base URL
   js/core/supabase-config.js       Cria o cliente Supabase
   js/core/icons.js                 Ícones Lucide
+  js/core/app-menu.js              Menu de alternância entre plataformas
   js/core/theme.js                 Tema claro/escuro e cor dos detalhes
   js/auth/auth.js                  Sessão, perfil, sidebar e logout
   js/auth/login.js                 Fluxo OAuth e redirecionamento

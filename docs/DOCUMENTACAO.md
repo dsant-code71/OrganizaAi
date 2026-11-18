@@ -5,7 +5,12 @@
 O OrganizAI é uma aplicação web estática com dois módulos:
 
 - **OrganizAI**: lista de tarefas local no modo visitante ou privada por usuário no Supabase.
-- **EstudAI**: chat de estudos com histórico de conversas e respostas em streaming.
+- **EstudAI**: chat de estudos com histórico de conversas e respostas em streaming — plataforma principal.
+
+A URL raiz (`/`) redireciona para o EstudAI via `vercel.json`. O OrganizAI
+continua em `/index.html`, com o alias `/organizai`. O menu de plataformas no
+cabeçalho (`assets/js/core/app-menu.js`) lista os dois módulos e marca o atual
+com `aria-current="page"`.
 
 O fluxo de autenticação Google continua no projeto, mas está desativado por
 padrão. No modo atual (visitante), tarefas e conversas ficam no `localStorage`
@@ -40,6 +45,7 @@ assets/
   js/app-config.js
   js/core/supabase-config.js
   js/core/icons.js
+  js/core/app-menu.js
   js/core/theme.js
   js/auth/auth.js
   js/auth/login.js

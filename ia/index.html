@@ -10,13 +10,50 @@
     <script src="../assets/js/app-config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous"></script>
     <script src="../assets/js/core/icons.js"></script>
+    <script src="../assets/js/core/app-menu.js"></script>
     <script src="../assets/js/core/theme.js"></script>
     <link rel="stylesheet" href="../assets/css/base.css" />
     <link rel="stylesheet" href="../assets/css/ia.css" />
   </head>
   <body>
+    <div id="appMenuBackdrop" class="app-menu-backdrop" hidden></div>
+    <aside id="appMenu" class="app-menu" aria-label="Alternar plataforma" hidden>
+      <div class="app-menu-header">
+        <span>Plataformas</span>
+        <button id="appMenuClose" type="button" class="app-menu-close" aria-label="Fechar menu">
+          <i data-icon="x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <nav class="app-menu-list">
+        <a class="app-menu-item is-current" href="/ia/" aria-current="page">
+          <span class="app-menu-avatar" aria-hidden="true">EA</span>
+          <span class="app-menu-text">
+            <strong>EstudAI</strong>
+            <small>Assistente de estudos</small>
+          </span>
+        </a>
+        <a class="app-menu-item" href="/organizai">
+          <span class="app-menu-avatar" aria-hidden="true">OA</span>
+          <span class="app-menu-text">
+            <strong>OrganizAI</strong>
+            <small>Tarefas e organização</small>
+          </span>
+        </a>
+      </nav>
+    </aside>
+
     <header class="brand" aria-label="EstudAI">
-      <a class="brand-link" href="../index.html" title="Ir para a lista de tarefas (OrganizAI)" aria-label="EstudAI — ir para a lista de tarefas (OrganizAI)">
+      <button
+        id="appMenuToggle"
+        type="button"
+        class="nav-toggle"
+        aria-label="Abrir menu de plataformas"
+        aria-controls="appMenu"
+        aria-expanded="false"
+      >
+        <i data-icon="menu" aria-hidden="true"></i>
+      </button>
+      <a class="brand-link" href="/organizai" title="Ir para a lista de tarefas (OrganizAI)" aria-label="EstudAI — ir para a lista de tarefas (OrganizAI)">
         <div class="avatar-ring"><span>EA</span></div>
         <h1>EstudAI</h1>
       </a>
@@ -80,8 +117,8 @@
 
       <section class="chat-main" aria-label="Conversa">
         <header class="chat-header">
-          <button id="sidebarToggle" type="button" class="sidebar-toggle" aria-label="Abrir menu e conversas" aria-controls="sidebar" aria-expanded="false">
-            <i data-icon="menu" aria-hidden="true"></i>
+          <button id="sidebarToggle" type="button" class="sidebar-toggle" aria-label="Abrir conversas" aria-controls="sidebar" aria-expanded="false">
+            <i data-icon="list" aria-hidden="true"></i>
           </button>
           <h2 id="chatTitle">EstudAI</h2>
         </header>
