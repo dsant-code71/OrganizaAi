@@ -256,7 +256,7 @@
     z-index: 25;
     display: flex;
     flex-direction: column;
-    width: 260px;
+    width: var(--sidebar-column);
     padding: 22px 16px;
     background: var(--surface);
     border-right: 1px solid var(--border-soft);
@@ -327,7 +327,7 @@
 
 @media (min-width: 901px) {
     body.has-sidebar {
-        padding-left: 292px;
+        padding-left: calc(var(--sidebar-column) + 32px);
     }
 
     body.has-sidebar .user-menu {

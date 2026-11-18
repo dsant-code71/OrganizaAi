@@ -8,7 +8,7 @@ body {
 body > .brand-bar {
     position: fixed;
     top: 20px;
-    left: 20px;
+    left: 0;
     z-index: 30;
 }
 
@@ -417,7 +417,7 @@ li.task-item.completed .remove-btn:hover {
 
     body > .brand-bar {
         top: 12px;
-        left: 12px;
+        left: 0;
     }
 
     .todo-container {
