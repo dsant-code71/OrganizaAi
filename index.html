@@ -27,18 +27,19 @@
       </div>
       <nav class="app-menu-list">
         <a class="app-menu-item is-current" href="/organizai" aria-current="page">
-          <span class="app-menu-avatar" aria-hidden="true">OA</span>
+          <span class="avatar-ring app-menu-avatar" aria-hidden="true"><span>OA</span></span>
           <span class="app-menu-text">
             <strong>OrganizAI</strong>
             <small>Tarefas e organização</small>
           </span>
         </a>
         <a class="app-menu-item" href="/ia/">
-          <span class="app-menu-avatar" aria-hidden="true">EA</span>
+          <span class="avatar-ring app-menu-avatar" aria-hidden="true"><span>EA</span></span>
           <span class="app-menu-text">
             <strong>EstudAI</strong>
             <small>Assistente de estudos</small>
           </span>
+          <span class="app-menu-arrow" aria-hidden="true">→</span>
         </a>
       </nav>
     </aside>
@@ -47,7 +48,7 @@
 
     <div id="userMenu" class="user-menu" aria-label="Conta" hidden></div>
 
-    <header class="brand" aria-label="OrganizAI">
+    <div class="brand-bar">
       <button
         id="appMenuToggle"
         type="button"
@@ -58,16 +59,19 @@
       >
         <i data-icon="menu" aria-hidden="true"></i>
       </button>
-      <a
-        class="brand-link"
-        href="/ia/"
-        title="Ir para o EstudAI"
-        aria-label="OrganizAI — ir para o EstudAI"
-      >
-        <div class="avatar-ring"><span>OA</span></div>
-        <h1>OrganizAI</h1>
-      </a>
-    </header>
+
+      <header class="brand" aria-label="OrganizAI">
+        <a
+          class="brand-link"
+          href="/ia/"
+          title="Ir para o EstudAI"
+          aria-label="OrganizAI — ir para o EstudAI"
+        >
+          <div class="avatar-ring"><span>OA</span></div>
+          <h1>OrganizAI</h1>
+        </a>
+      </header>
+    </div>
 
     <main class="todo-container" aria-label="Lista de tarefas" hidden>
       <div class="modal-mark" aria-hidden="true">

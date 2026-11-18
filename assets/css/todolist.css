@@ -5,7 +5,7 @@ body {
     padding: 90px 16px calc(24px + env(safe-area-inset-bottom));
 }
 
-body > .brand {
+body > .brand-bar {
     position: fixed;
     top: 20px;
     left: 20px;
@@ -415,17 +415,9 @@ li.task-item.completed .remove-btn:hover {
         max-height: min(46vh, 420px);
     }
 
-    body > .brand {
+    body > .brand-bar {
         top: 12px;
         left: 12px;
-    }
-
-    body > .brand .brand-link {
-        padding: 4px;
-    }
-
-    body > .brand h1 {
-        display: none;
     }
 
     .todo-container {

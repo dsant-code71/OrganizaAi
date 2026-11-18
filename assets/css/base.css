@@ -701,8 +701,11 @@ svg {
 
 /* Menu de plataformas */
 
-.brand {
-    gap: 8px;
+.brand-bar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px;
 }
 
 .nav-toggle {
@@ -710,27 +713,37 @@ svg {
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: 58px;
+    height: 58px;
     padding: 0;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow);
     color: var(--text);
     cursor: pointer;
     transition: background var(--transition), border-color var(--transition),
-        color var(--transition), box-shadow var(--transition);
+        color var(--transition), box-shadow var(--transition),
+        transform var(--transition);
 }
 
 .nav-toggle:hover {
     background: var(--surface-2);
     border-color: var(--accent);
+    box-shadow: var(--shadow-hover);
     color: var(--accent);
+    transform: translateY(-1px);
 }
 
 .nav-toggle .lucide {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
+}
+
+@media (max-width: 560px) {
+    .brand-bar {
+        gap: 8px;
+    }
 }
 
 .app-menu-backdrop {
@@ -829,17 +842,19 @@ svg {
 }
 
 .app-menu-avatar {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
     width: 40px;
     height: 40px;
-    border-radius: 50%;
-    background: var(--gradient);
-    color: var(--text);
+}
+
+.app-menu-avatar > span {
     font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.04em;
+}
+
+.app-menu-arrow {
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 18px;
+    line-height: 1;
 }
 
 .app-menu-text {

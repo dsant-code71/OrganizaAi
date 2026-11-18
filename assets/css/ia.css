@@ -8,7 +8,7 @@ body {
 
 /* Marca */
 
-.brand {
+.brand-bar {
     align-self: flex-start;
     margin: 20px 20px 12px;
 }
@@ -1250,7 +1250,7 @@ body {
         max-width: 88%;
     }
 
-    .brand {
+    .brand-bar {
         margin: 14px 12px 10px;
     }
 }
@@ -1354,7 +1354,7 @@ body {
 }
 
 @media (max-width: 380px) {
-    .brand {
+    .brand-bar {
         margin: 12px 10px 8px;
     }
 

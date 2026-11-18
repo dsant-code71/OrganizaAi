@@ -26,23 +26,24 @@
       </div>
       <nav class="app-menu-list">
         <a class="app-menu-item is-current" href="/ia/" aria-current="page">
-          <span class="app-menu-avatar" aria-hidden="true">EA</span>
+          <span class="avatar-ring app-menu-avatar" aria-hidden="true"><span>EA</span></span>
           <span class="app-menu-text">
             <strong>EstudAI</strong>
             <small>Assistente de estudos</small>
           </span>
         </a>
         <a class="app-menu-item" href="/organizai">
-          <span class="app-menu-avatar" aria-hidden="true">OA</span>
+          <span class="avatar-ring app-menu-avatar" aria-hidden="true"><span>OA</span></span>
           <span class="app-menu-text">
             <strong>OrganizAI</strong>
             <small>Tarefas e organização</small>
           </span>
+          <span class="app-menu-arrow" aria-hidden="true">→</span>
         </a>
       </nav>
     </aside>
 
-    <header class="brand" aria-label="EstudAI">
+    <div class="brand-bar">
       <button
         id="appMenuToggle"
         type="button"
@@ -53,11 +54,14 @@
       >
         <i data-icon="menu" aria-hidden="true"></i>
       </button>
-      <a class="brand-link" href="/organizai" title="Ir para a lista de tarefas (OrganizAI)" aria-label="EstudAI — ir para a lista de tarefas (OrganizAI)">
-        <div class="avatar-ring"><span>EA</span></div>
-        <h1>EstudAI</h1>
-      </a>
-    </header>
+
+      <header class="brand" aria-label="EstudAI">
+        <a class="brand-link" href="/organizai" title="Ir para a lista de tarefas (OrganizAI)" aria-label="EstudAI — ir para a lista de tarefas (OrganizAI)">
+          <div class="avatar-ring"><span>EA</span></div>
+          <h1>EstudAI</h1>
+        </a>
+      </header>
+    </div>
 
     <!-- Tela de login -->
     <section id="loginScreen" class="login-screen" hidden>
