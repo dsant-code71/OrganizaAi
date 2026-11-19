@@ -1214,10 +1214,168 @@ async function loadConversations() {
   }
 }
 
+let menuConversaAberto = null;
+
+function fecharMenuConversa(devolverFoco = false) {
+  if (!menuConversaAberto) {
+    return false;
+  }
+
+  const { menu, button } = menuConversaAberto;
+  menu.hidden = true;
+  menu.classList.remove("is-upward");
+  button.setAttribute("aria-expanded", "false");
+  menuConversaAberto = null;
+
+  if (devolverFoco && document.contains(button)) {
+    button.focus();
+  }
+
+  return true;
+}
+
+function montarMenuConversa(menu, item, conversation) {
+  const editar = criarItemMenu("Editar título", "pencil");
+  editar.addEventListener("click", () => {
+    fecharMenuConversa();
+    iniciarEdicaoTitulo(item, conversation);
+  });
+
+  const excluir = criarItemMenu("Excluir", "trash-2", "is-danger");
+  excluir.addEventListener("click", (event) => {
+    event.stopPropagation();
+    mostrarConfirmacaoExclusao(menu, conversation);
+  });
+
+  menu.replaceChildren(editar, excluir);
+}
+
+function abrirMenuConversa(row, button, menu, item, conversation) {
+  fecharMenuConversa();
+  montarMenuConversa(menu, item, conversation);
+  menu.hidden = false;
+  button.setAttribute("aria-expanded", "true");
+  menuConversaAberto = { row, button, menu };
+
+  const lista = el.conversationsList.getBoundingClientRect();
+  const retangulo = row.getBoundingClientRect();
+  menu.classList.toggle("is-upward", retangulo.bottom + menu.offsetHeight + 8 > lista.bottom);
+
+  const destino = menu.querySelector(".conversation-menu-item, .conversation-menu-btn");
+  if (destino) {
+    destino.focus();
+  }
+}
+
+function criarItemMenu(texto, nomeIcone, classe = "") {
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "conversation-menu-item" + (classe ? " " + classe : "");
+  botao.setAttribute("role", "menuitem");
+
+  const icone = criarIcone(nomeIcone);
+  if (icone) {
+    botao.appendChild(icone);
+  }
+
+  const rotulo = document.createElement("span");
+  rotulo.textContent = texto;
+  botao.appendChild(rotulo);
+
+  return botao;
+}
+
+function mostrarAvisoConversa(texto) {
+  const aviso = document.createElement("div");
+  aviso.className = "notice error conversation-aviso";
+  aviso.setAttribute("role", "status");
+  aviso.textContent = texto;
+  el.conversationsList.prepend(aviso);
+  window.setTimeout(() => aviso.remove(), 4000);
+}
+
+function mostrarConfirmacaoExclusao(menu, conversation) {
+  menu.replaceChildren();
+
+  const aviso = document.createElement("p");
+  aviso.className = "conversation-menu-confirm";
+  aviso.textContent = "Excluir esta conversa?";
+
+  const acoes = document.createElement("div");
+  acoes.className = "conversation-menu-actions";
+
+  const cancelar = document.createElement("button");
+  cancelar.type = "button";
+  cancelar.className = "conversation-menu-btn";
+  cancelar.textContent = "Cancelar";
+  cancelar.addEventListener("click", () => fecharMenuConversa(true));
+
+  const excluir = document.createElement("button");
+  excluir.type = "button";
+  excluir.className = "conversation-menu-btn is-danger";
+  excluir.textContent = "Excluir";
+  excluir.addEventListener("click", async () => {
+    fecharMenuConversa();
+    await excluirConversa(conversation.id);
+  });
+
+  acoes.append(cancelar, excluir);
+  menu.append(aviso, acoes);
+  excluir.focus();
+}
+
+function iniciarEdicaoTitulo(alvo, conversation) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "conversation-edit-input";
+  input.value = conversation.title || "";
+  input.maxLength = 120;
+  input.setAttribute("aria-label", "Editar título da conversa");
+
+  let finalizado = false;
+
+  const finalizar = async (salvar) => {
+    if (finalizado) {
+      return;
+    }
+    finalizado = true;
+
+    if (salvar) {
+      const novo = input.value.trim();
+      if (novo && novo !== conversation.title) {
+        await aplicarTitulo(conversation.id, novo);
+        return;
+      }
+    }
+
+    renderConversations();
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finalizar(true);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      finalizar(false);
+    }
+  });
+  input.addEventListener("blur", () => finalizar(true));
+
+  alvo.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
 function renderConversations() {
+  fecharMenuConversa();
   el.conversationsList.replaceChildren();
 
   state.conversations.forEach((conversation) => {
+    const row = document.createElement("div");
+    row.className = "conversation-row";
+
     const item = document.createElement("button");
     item.type = "button";
     const active = conversation.id === state.currentId;
@@ -1242,8 +1400,76 @@ function renderConversations() {
         el.messageInput.focus();
       }
     });
-    el.conversationsList.appendChild(item);
+
+    const options = document.createElement("button");
+    options.type = "button";
+    options.className = "conversation-options";
+    options.setAttribute("aria-label", `Opções da conversa: ${conversation.title || "Conversa"}`);
+    options.setAttribute("aria-haspopup", "menu");
+    options.setAttribute("aria-expanded", "false");
+
+    const dots = criarIcone("more-horizontal");
+    if (dots) {
+      options.appendChild(dots);
+    } else {
+      options.textContent = "⋯";
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "conversation-menu";
+    menu.setAttribute("role", "menu");
+    menu.hidden = true;
+
+    options.addEventListener("click", () => {
+      if (menuConversaAberto && menuConversaAberto.menu === menu) {
+        fecharMenuConversa(true);
+      } else {
+        abrirMenuConversa(row, options, menu, item, conversation);
+      }
+    });
+
+    row.append(item, options, menu);
+    el.conversationsList.appendChild(row);
   });
+}
+
+async function excluirConversa(id) {
+  const conversa = state.conversations.find((item) => item.id === id);
+  if (!conversa) {
+    return;
+  }
+
+  const eraAtual = id === state.currentId;
+
+  if (AUTH_ENABLED) {
+    const { error } = await supabase.from("conversations").delete().eq("id", id);
+    if (error) {
+      mostrarAvisoConversa("Não foi possível excluir esta conversa.");
+      return;
+    }
+  }
+
+  state.conversations = state.conversations.filter((item) => item.id !== id);
+
+  if (!AUTH_ENABLED) {
+    salvarConversasLocais();
+  }
+
+  if (state.conversations.length === 0) {
+    state.currentId = null;
+    renderConversations();
+    await createConversation();
+    return;
+  }
+
+  if (eraAtual) {
+    state.currentId = state.conversations[0].id;
+    el.chatTitle.textContent = state.conversations[0].title || "Conversa";
+    await selectConversation(state.currentId);
+    return;
+  }
+
+  renderConversations();
 }
 
 async function createConversation() {
@@ -1796,6 +2022,7 @@ function openSidebar() {
 }
 
 function closeSidebar(returnFocus = false) {
+  fecharMenuConversa();
   el.sidebar.classList.remove("is-open");
   el.sidebarBackdrop.hidden = true;
   el.sidebarToggle.setAttribute("aria-expanded", "false");
@@ -1850,8 +2077,33 @@ function bindEvents() {
   el.sidebarToggle.addEventListener("click", openSidebar);
   el.sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 
+  document.addEventListener("click", (event) => {
+    if (!menuConversaAberto) {
+      return;
+    }
+
+    const alvo = event.target;
+    const caminho = typeof event.composedPath === "function" ? event.composedPath() : [];
+    const dentro = caminho.includes(menuConversaAberto.menu)
+      || caminho.includes(menuConversaAberto.button)
+      || (alvo instanceof Node
+        && (menuConversaAberto.menu.contains(alvo) || menuConversaAberto.button.contains(alvo)));
+
+    if (!dentro) {
+      fecharMenuConversa();
+    }
+  });
+
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && el.sidebar.classList.contains("is-open")) {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (fecharMenuConversa(true)) {
+      return;
+    }
+
+    if (el.sidebar.classList.contains("is-open")) {
       closeSidebar(true);
     }
   });

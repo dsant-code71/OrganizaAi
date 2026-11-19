@@ -257,6 +257,158 @@ body {
     color: var(--accent);
 }
 
+.conversation-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.conversation-row .conversation-item {
+    flex: 1;
+}
+
+.conversation-options {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.conversation-options .lucide {
+    width: 16px;
+    height: 16px;
+}
+
+.conversation-options:hover,
+.conversation-options[aria-expanded="true"] {
+    background: var(--surface);
+    border-color: var(--border-soft);
+    color: var(--text);
+}
+
+.conversation-menu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% - 2px);
+    right: 8px;
+    min-width: 172px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+}
+
+.conversation-menu[hidden] {
+    display: none;
+}
+
+.conversation-menu.is-upward {
+    top: auto;
+    bottom: calc(100% - 2px);
+}
+
+.conversation-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.conversation-menu-item .lucide {
+    width: 15px;
+    height: 15px;
+    color: var(--text-muted);
+}
+
+.conversation-menu-item:hover,
+.conversation-menu-item:focus-visible {
+    background: var(--surface-2);
+}
+
+.conversation-menu-item.is-danger,
+.conversation-menu-item.is-danger .lucide {
+    color: var(--danger);
+}
+
+.conversation-menu-item.is-danger:hover {
+    background: var(--danger-soft);
+}
+
+.conversation-menu-confirm {
+    margin: 2px 4px 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.conversation-menu-actions {
+    display: flex;
+    gap: 6px;
+    padding: 0 2px 2px;
+}
+
+.conversation-menu-btn {
+    flex: 1;
+    padding: 7px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.conversation-menu-btn:hover {
+    background: var(--surface-3);
+}
+
+.conversation-menu-btn.is-danger {
+    background: var(--danger-soft);
+    border-color: rgba(220, 38, 38, 0.35);
+    color: var(--danger);
+}
+
+.conversation-edit-input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 11px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.conversation-aviso {
+    margin-bottom: 0;
+}
+
 .sidebar-footer {
     display: flex;
     flex-direction: column;
