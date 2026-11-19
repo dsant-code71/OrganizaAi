@@ -278,12 +278,21 @@ Em bancos existentes, `0003` aplica a limpeza.
 ## 10. Execução local
 
 ```bash
-npx serve .
+npm run dev
 ```
 
-Abra `http://localhost:3000`. No modo visitante não é necessário configurar
-Redirect URLs. Para usar outra porta no modo autenticado, inclua a URL nas
-Redirect URLs do Supabase.
+O servidor de desenvolvimento é um script Node sem dependências
+(`scripts/dev-server.js`) que lê o `vercel.json` como fonte da verdade e aplica
+as mesmas regras da Vercel:
+
+- `redirects`: `/` → `307 Location: /ia/`;
+- `rewrites`: `/organizai` → `/index.html`;
+- `headers`: CSP e headers de segurança idênticos aos de produção.
+
+Abra `http://localhost:3000` — o redirecionamento leva ao EstudAI. O OrganizAI
+fica disponível em `http://localhost:3000/organizai`. No modo visitante não é
+necessário configurar Redirect URLs. Para usar outra porta no modo autenticado,
+inclua a URL nas Redirect URLs do Supabase.
 
 Função de chat local:
 

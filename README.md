@@ -120,11 +120,20 @@ No modo visitante, a autenticação não é chamada.
 ## Desenvolvimento local
 
 ```bash
-npx serve .
+npm run dev
 ```
 
-Abra `http://localhost:3000`. A URL usada no login precisa estar nas Redirect
-URLs do Supabase somente quando a autenticação estiver ativa.
+O comando inicia um servidor Node sem dependências em `http://localhost:3000`
+que lê o `vercel.json` e replica as regras de produção:
+
+- `/` responde `307` com `Location: /ia/` (EstudAI é a entrada principal);
+- `/organizai` é reescrito para `/index.html`;
+- os headers de segurança do `vercel.json` também são aplicados.
+
+Abra `http://localhost:3000` — você será levado ao EstudAI. Para abrir o
+OrganizAI diretamente, use `http://localhost:3000/organizai`. A URL usada no
+login precisa estar nas Redirect URLs do Supabase somente quando a
+autenticação estiver ativa.
 
 Para executar a função localmente:
 
