@@ -425,7 +425,7 @@ async function adicionarTarefa() {
     var tarefaTexto = tarefaInput.value.trim();
 
     if (tarefaTexto === '') {
-        alert('Por favor, insira uma tarefa.');
+        mostrarStatus('Por favor, insira uma tarefa.', 'error');
         return;
     }
 
