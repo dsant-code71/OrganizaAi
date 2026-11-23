@@ -92,11 +92,20 @@ function headersPara(pathname) {
   return headers;
 }
 
+function caminhoBloqueado(pathname) {
+  const segmentos = decodeURIComponent(pathname).split(/[\\/]+/);
+  return segmentos.some((segmento) => segmento.startsWith('.'));
+}
+
 function resolverArquivo(pathname) {
   let relativo = decodeURIComponent(pathname);
 
   if (relativo.endsWith('/')) {
     relativo += 'index.html';
+  }
+
+  if (caminhoBloqueado(relativo)) {
+    return null;
   }
 
   const destino = path.resolve(ROOT, '.' + relativo);
