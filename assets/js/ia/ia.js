@@ -1530,6 +1530,10 @@ async function selectConversation(id) {
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
 
+  if (state.currentId !== id) {
+    return;
+  }
+
   if (error) {
     console.error("Erro ao carregar mensagens:", error.message);
     return;
@@ -2084,14 +2088,26 @@ function bindEvents() {
 
     const alvo = event.target;
     const caminho = typeof event.composedPath === "function" ? event.composedPath() : [];
-    const dentro = caminho.includes(menuConversaAberto.menu)
-      || caminho.includes(menuConversaAberto.button)
-      || (alvo instanceof Node
-        && (menuConversaAberto.menu.contains(alvo) || menuConversaAberto.button.contains(alvo)));
+    const dentroMenu = caminho.includes(menuConversaAberto.menu)
+      || (alvo instanceof Node && menuConversaAberto.menu.contains(alvo));
+    const dentroBotao = caminho.includes(menuConversaAberto.button)
+      || (alvo instanceof Node && menuConversaAberto.button.contains(alvo));
 
-    if (!dentro) {
-      fecharMenuConversa();
+    if (dentroBotao) {
+      return;
     }
+
+    if (dentroMenu) {
+      const interativo = alvo instanceof Element
+        ? alvo.closest(".conversation-menu-item, .conversation-menu-btn, .conversation-edit-input")
+        : null;
+      if (!interativo) {
+        fecharMenuConversa();
+      }
+      return;
+    }
+
+    fecharMenuConversa();
   });
 
   document.addEventListener("keydown", (event) => {
