@@ -116,12 +116,6 @@ button:active {
     letter-spacing: 0.2px;
 }
 
-.input-hint {
-    margin: -6px 4px 12px;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
 #divFiltros {
     display: flex;
     gap: 8px;
