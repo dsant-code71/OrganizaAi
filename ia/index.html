@@ -87,6 +87,7 @@
     <!-- Aplicativo de chat -->
     <main id="chatApp" class="chat-app" hidden>
       <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
+      <p id="appAnnouncer" class="sr-only" role="status" aria-live="polite"></p>
 
       <aside id="sidebar" class="sidebar" aria-label="Navegação e conversas">
         <div class="sidebar-header">
@@ -96,7 +97,17 @@
             <span>Nova</span>
           </button>
         </div>
-        <nav id="conversationsList" class="conversations-list"></nav>
+        <div class="sidebar-search">
+          <i data-icon="search" aria-hidden="true"></i>
+          <input
+            id="conversationSearch"
+            type="search"
+            placeholder="Buscar conversas..."
+            aria-label="Buscar conversas"
+            autocomplete="off"
+          />
+        </div>
+        <nav id="conversationsList" class="conversations-list" aria-label="Lista de conversas"></nav>
         <div class="sidebar-footer">
           <div class="sidebar-tools">
             <span class="sidebar-section-label">Preferências</span>
@@ -133,11 +144,17 @@
             <div class="avatar-ring empty-avatar"><span>EA</span></div>
             <h3>Como posso ajudar nos estudos?</h3>
             <p>Peça uma explicação, um resumo ou ajuda com um exercício.</p>
-            <div class="suggestions">
-              <button type="button" class="suggestion" data-prompt="Explique o Teorema de Pitágoras com um exemplo.">Teorema de Pitágoras</button>
-              <button type="button" class="suggestion" data-prompt="Me ajude a montar um cronograma de estudos para a semana.">Cronograma de estudos</button>
-              <button type="button" class="suggestion" data-prompt="Explique a diferença entre mitose e meiose.">Mitose x meiose</button>
+            <span class="suggestions-label">Exemplos por matéria</span>
+            <div class="suggestions" aria-label="Exemplos por matéria">
+              <button type="button" class="suggestion" data-prompt="Explique o Teorema de Pitágoras com um exemplo.">Matemática · Pitágoras</button>
+              <button type="button" class="suggestion" data-prompt="Explique a diferença entre mitose e meiose.">Biologia · Mitose e meiose</button>
+              <button type="button" class="suggestion" data-prompt="Resuma a Revolução Industrial em tópicos.">História · Revolução Industrial</button>
+              <button type="button" class="suggestion" data-prompt="Explique figuras de linguagem com exemplos.">Português · Figuras de linguagem</button>
+              <button type="button" class="suggestion" data-prompt="Me ajude a montar um cronograma de estudos para a semana.">Planejamento · Semana</button>
             </div>
+            <p id="guestHint" class="empty-hint" hidden>
+              Você está no modo visitante: conversas e tarefas ficam salvas apenas neste navegador.
+            </p>
           </div>
         </div>
 

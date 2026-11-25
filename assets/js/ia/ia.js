@@ -19,6 +19,9 @@ const el = {
   sidebarBackdrop: document.getElementById("sidebarBackdrop"),
   conversationsList: document.getElementById("conversationsList"),
   newConversationBtn: document.getElementById("newConversationBtn"),
+  conversationSearch: document.getElementById("conversationSearch"),
+  appAnnouncer: document.getElementById("appAnnouncer"),
+  guestHint: document.getElementById("guestHint"),
   messages: document.getElementById("messages"),
   emptyState: document.getElementById("emptyState"),
   composer: document.getElementById("composer"),
@@ -38,12 +41,59 @@ const state = {
   conversations: [],
   currentId: null,
   sending: false,
+  abortController: null,
+  filtroConversa: "",
+  fixadas: new Set(),
 };
 
 const CHAVE_CONVERSAS_VISITANTE = "organizaai.estudai.visitante.v1";
+const CHAVE_FIXADAS_VISITANTE = "organizaai.estudai.fixadas.v1";
 
 function criarIcone(nome) {
   return window.OrganizaIcons ? window.OrganizaIcons.criar(nome) : null;
+}
+
+let anuncioTimer = null;
+
+function anunciar(texto) {
+  if (!el.appAnnouncer || !texto) {
+    return;
+  }
+
+  el.appAnnouncer.textContent = "";
+  window.clearTimeout(anuncioTimer);
+  window.requestAnimationFrame(() => {
+    el.appAnnouncer.textContent = texto;
+    anuncioTimer = window.setTimeout(() => {
+      el.appAnnouncer.textContent = "";
+    }, 5000);
+  });
+}
+
+function normalizarBusca(texto) {
+  return String(texto ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function lerFixadas() {
+  try {
+    const bruto = window.localStorage.getItem(CHAVE_FIXADAS_VISITANTE);
+    const dados = bruto ? JSON.parse(bruto) : [];
+    return new Set(Array.isArray(dados) ? dados.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function salvarFixadas() {
+  try {
+    window.localStorage.setItem(CHAVE_FIXADAS_VISITANTE, JSON.stringify([...state.fixadas]));
+  } catch (erro) {
+    console.warn("Não foi possível salvar conversas fixadas.", erro);
+  }
 }
 
 function gerarIdLocal() {
@@ -1016,21 +1066,33 @@ function autoGrow() {
 }
 
 function atualizarBotaoEnviar() {
-  el.sendBtn.disabled = state.sending || el.messageInput.value.trim() === "";
+  if (state.sending) {
+    el.sendBtn.disabled = false;
+    return;
+  }
+  el.sendBtn.disabled = el.messageInput.value.trim() === "";
 }
 
 function setSending(sending) {
   state.sending = sending;
-  atualizarBotaoEnviar();
   el.sendBtn.classList.toggle("is-sending", sending);
-  el.sendBtn.setAttribute("aria-label", sending ? "Enviando mensagem" : "Enviar mensagem");
+  el.sendBtn.classList.toggle("is-stop", sending);
+  el.sendBtn.disabled = false;
+  el.sendBtn.setAttribute("aria-label", sending ? "Parar geração" : "Enviar mensagem");
+  el.sendBtn.title = sending ? "Parar geração" : "Enviar mensagem";
 
-  const label = el.sendBtn.querySelector(".btn-send-label");
-  if (label) {
-    label.textContent = sending ? "..." : "Enviar";
+  el.sendBtn.replaceChildren();
+  const icon = criarIcone(sending ? "square" : "send");
+  if (icon) {
+    el.sendBtn.appendChild(icon);
   }
+  const label = document.createElement("span");
+  label.className = "btn-send-label";
+  label.textContent = sending ? "Parar" : "Enviar";
+  el.sendBtn.appendChild(label);
 
   el.messages.setAttribute("aria-busy", sending ? "true" : "false");
+  atualizarBotaoEnviar();
 }
 
 /* ---------------- Autenticação ---------------- */
@@ -1234,7 +1296,25 @@ function fecharMenuConversa(devolverFoco = false) {
   return true;
 }
 
+function alternarFixacao(id) {
+  if (state.fixadas.has(id)) {
+    state.fixadas.delete(id);
+    anunciar("Conversa desafixada.");
+  } else {
+    state.fixadas.add(id);
+    anunciar("Conversa fixada no topo da lista.");
+  }
+
+  salvarFixadas();
+  fecharMenuConversa();
+  renderConversations();
+}
+
 function montarMenuConversa(menu, item, conversation) {
+  const fixada = state.fixadas.has(conversation.id);
+  const fixar = criarItemMenu(fixada ? "Desafixar conversa" : "Fixar conversa", "pin");
+  fixar.addEventListener("click", () => alternarFixacao(conversation.id));
+
   const editar = criarItemMenu("Editar título", "pencil");
   editar.addEventListener("click", () => {
     fecharMenuConversa();
@@ -1247,7 +1327,22 @@ function montarMenuConversa(menu, item, conversation) {
     mostrarConfirmacaoExclusao(menu, conversation);
   });
 
-  menu.replaceChildren(editar, excluir);
+  menu.replaceChildren(fixar, editar, excluir);
+}
+
+function abrirMenuPorBotao(button) {
+  const row = button?.closest(".conversation-row");
+  if (!row) {
+    return;
+  }
+
+  const menu = row.querySelector(".conversation-menu");
+  const item = row.querySelector(".conversation-item");
+  const conversation = state.conversations.find((candidate) => candidate.id === row.dataset.conversationId);
+
+  if (menu && item && conversation) {
+    abrirMenuConversa(row, button, menu, item, conversation);
+  }
 }
 
 function abrirMenuConversa(row, button, menu, item, conversation) {
@@ -1291,6 +1386,7 @@ function mostrarAvisoConversa(texto) {
   aviso.setAttribute("role", "status");
   aviso.textContent = texto;
   el.conversationsList.prepend(aviso);
+  anunciar(texto);
   window.setTimeout(() => aviso.remove(), 4000);
 }
 
@@ -1368,13 +1464,84 @@ function iniciarEdicaoTitulo(alvo, conversation) {
   input.select();
 }
 
+function grupoDaConversa(conversation) {
+  if (state.fixadas.has(conversation.id)) {
+    return "Fixadas";
+  }
+
+  const data = new Date(conversation.updated_at).getTime();
+  if (Number.isNaN(data)) {
+    return "Mais antigas";
+  }
+
+  const agora = new Date();
+  const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime();
+
+  if (data >= inicioHoje) {
+    return "Hoje";
+  }
+
+  if (data >= inicioHoje - 6 * 24 * 60 * 60 * 1000) {
+    return "Últimos 7 dias";
+  }
+
+  return "Mais antigas";
+}
+
 function renderConversations() {
   fecharMenuConversa();
   el.conversationsList.replaceChildren();
 
-  state.conversations.forEach((conversation) => {
+  const termo = normalizarBusca(state.filtroConversa);
+  const visiveis = state.conversations
+    .filter((conversation) => {
+      if (!termo) {
+        return true;
+      }
+
+      if (normalizarBusca(conversation.title).includes(termo)) {
+        return true;
+      }
+
+      return !AUTH_ENABLED && (conversation.messages ?? []).some((message) => (
+        normalizarBusca(message.content).includes(termo)
+      ));
+    })
+    .sort((a, b) => {
+      const fixacao = Number(state.fixadas.has(b.id)) - Number(state.fixadas.has(a.id));
+      if (fixacao) {
+        return fixacao;
+      }
+
+      return (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0);
+    });
+
+  if (!visiveis.length) {
+    const vazio = document.createElement("p");
+    vazio.className = "conversation-empty";
+    vazio.textContent = termo
+      ? "Nenhuma conversa encontrada."
+      : "Nenhuma conversa ainda. Crie uma para começar.";
+    el.conversationsList.appendChild(vazio);
+    return;
+  }
+
+  let grupoAtual = null;
+
+  visiveis.forEach((conversation) => {
+    const grupo = grupoDaConversa(conversation);
+
+    if (grupo !== grupoAtual) {
+      grupoAtual = grupo;
+      const rotulo = document.createElement("div");
+      rotulo.className = "conversation-group-label";
+      rotulo.textContent = grupo;
+      el.conversationsList.appendChild(rotulo);
+    }
+
     const row = document.createElement("div");
     row.className = "conversation-row";
+    row.dataset.conversationId = conversation.id;
 
     const item = document.createElement("button");
     item.type = "button";
@@ -1450,6 +1617,9 @@ async function excluirConversa(id) {
   }
 
   state.conversations = state.conversations.filter((item) => item.id !== id);
+  state.fixadas.delete(id);
+  salvarFixadas();
+  anunciar("Conversa excluída.");
 
   if (!AUTH_ENABLED) {
     salvarConversasLocais();
@@ -1485,6 +1655,7 @@ async function createConversation() {
     state.currentId = conversa.id;
     el.chatTitle.textContent = conversa.title;
     salvarConversasLocais();
+    anunciar("Nova conversa criada.");
     renderConversations();
     showEmptyState();
     return conversa.id;
@@ -1509,6 +1680,7 @@ async function createConversation() {
   state.currentId = data.id;
   el.chatTitle.textContent = data.title;
   renderConversations();
+  anunciar("Nova conversa criada.");
   showEmptyState();
   return data.id;
 }
@@ -1550,6 +1722,7 @@ async function aplicarTitulo(conversationId, title) {
 
   conversation.title = title.trim();
   el.chatTitle.textContent = conversation.title;
+  anunciar("Título da conversa atualizado.");
 
   if (!AUTH_ENABLED) {
     conversation.updated_at = new Date().toISOString();
@@ -1584,27 +1757,345 @@ function renderMessages(messages) {
   }
 
   el.emptyState.hidden = true;
-  messages.forEach((message) => appendMessage(message.role, message.content));
+  messages.forEach((message, indice) => {
+    appendMessage(message.role, message.content, AUTH_ENABLED ? message.id : indice);
+  });
   scrollToBottom(true);
 }
 
-function appendMessage(role, text) {
+function criarBotaoAcao(acao, texto, nomeIcone, aoClicar) {
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "message-action";
+  botao.dataset.acao = acao;
+  botao.setAttribute("aria-label", texto);
+  botao.title = texto;
+
+  const icone = criarIcone(nomeIcone);
+  if (icone) {
+    botao.appendChild(icone);
+  }
+
+  const rotulo = document.createElement("span");
+  rotulo.textContent = texto;
+  botao.appendChild(rotulo);
+
+  botao.addEventListener("click", aoClicar);
+  return botao;
+}
+
+function atualizarAcoesMensagens() {
+  const assistentes = [...el.messages.querySelectorAll(".msg-assistant")];
+  const ultimo = assistentes[assistentes.length - 1];
+
+  el.messages.querySelectorAll(".message-action[data-acao='regenerar']").forEach((botao) => {
+    botao.hidden = !ultimo || botao.closest(".msg") !== ultimo;
+  });
+}
+
+function criarAcoesMensagem(row, role) {
+  const acoes = document.createElement("div");
+  acoes.className = "message-actions";
+
+  const copiar = criarBotaoAcao("copiar", "Copiar", "copy", () => {
+    const bruto = row.dataset.conteudo ?? "";
+    const conteudo = role === "assistant" ? extrairBlocos(bruto, true).corpo.trim() : bruto;
+    void copiarTexto(conteudo, copiar);
+  });
+  acoes.appendChild(copiar);
+
+  if (role === "user") {
+    acoes.appendChild(criarBotaoAcao("editar", "Editar mensagem", "pencil", () => {
+      iniciarEdicaoMensagem(row);
+    }));
+  }
+
+  if (role === "assistant") {
+    acoes.appendChild(criarBotaoAcao("regenerar", "Regenerar resposta", "rotate-ccw", () => {
+      void regenerarResposta(row);
+    }));
+  }
+
+  return acoes;
+}
+
+async function copiarTexto(texto, botao) {
+  if (!texto) {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto);
+    } else {
+      const temporario = document.createElement("textarea");
+      temporario.value = texto;
+      temporario.style.position = "fixed";
+      temporario.style.opacity = "0";
+      document.body.appendChild(temporario);
+      temporario.select();
+      document.execCommand("copy");
+      temporario.remove();
+    }
+
+    const rotulo = botao.querySelector("span");
+    const original = rotulo?.textContent;
+    if (rotulo) {
+      rotulo.textContent = "Copiado!";
+    }
+    botao.classList.add("is-done");
+    anunciar("Texto copiado.");
+
+    window.setTimeout(() => {
+      if (rotulo && original) {
+        rotulo.textContent = original;
+      }
+      botao.classList.remove("is-done");
+    }, 1800);
+  } catch {
+    anunciar("Não foi possível copiar o texto.");
+  }
+}
+
+function iniciarEdicaoMensagem(row) {
+  if (state.sending || !row) {
+    return;
+  }
+
+  const identificador = row.dataset.messageId || "";
+  const textoOriginal = row.dataset.conteudo ?? "";
+
+  if (!identificador || !textoOriginal) {
+    anunciar("Não foi possível editar esta mensagem.");
+    return;
+  }
+
+  const bubble = row.querySelector(".bubble");
+  const acoes = row.querySelector(".message-actions");
+
+  if (!bubble || !acoes) {
+    return;
+  }
+
+  const area = document.createElement("textarea");
+  area.className = "message-edit";
+  area.value = textoOriginal;
+  area.maxLength = 4000;
+  area.setAttribute("aria-label", "Editar mensagem enviada");
+
+  const barra = document.createElement("div");
+  barra.className = "message-edit-actions";
+
+  const restaurar = () => {
+    row.replaceChildren(bubble, acoes);
+    const botaoEditar = acoes.querySelector("[data-acao='editar']");
+    if (botaoEditar) {
+      botaoEditar.focus();
+    }
+  };
+
+  const salvar = () => {
+    const novo = area.value.trim();
+    if (!novo || novo === textoOriginal) {
+      restaurar();
+      return;
+    }
+    void editarMensagemUsuario(state.currentId, identificador, novo);
+  };
+
+  const cancelar = criarBotaoAcao("cancelar", "Cancelar", "x", restaurar);
+  const confirmar = criarBotaoAcao("confirmar", "Salvar e reenviar", "check", salvar);
+
+  area.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      restaurar();
+    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      salvar();
+    }
+  });
+
+  barra.append(cancelar, confirmar);
+  row.replaceChildren(area, barra);
+  area.focus();
+  area.setSelectionRange(area.value.length, area.value.length);
+}
+
+async function editarMensagemUsuario(conversationId, identificador, novoTexto) {
+  if (state.sending || !conversationId) {
+    return;
+  }
+
+  if (AUTH_ENABLED) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) {
+      anunciar("Não foi possível carregar a mensagem.");
+      return;
+    }
+
+    const indice = data.findIndex((message) => message.id === identificador);
+    if (indice === -1) {
+      anunciar("Não foi possível editar a mensagem.");
+      return;
+    }
+
+    const removidas = await supabase
+      .from("messages")
+      .delete()
+      .in("id", data.slice(indice).map((message) => message.id));
+
+    if (removidas.error) {
+      anunciar("Não foi possível editar a mensagem.");
+      return;
+    }
+
+    const salvou = await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      role: "user",
+      content: novoTexto,
+      created_at: data[indice].created_at,
+    });
+
+    if (salvou.error) {
+      anunciar("Não foi possível salvar a mensagem editada.");
+      return;
+    }
+
+    await selectConversation(conversationId);
+  } else {
+    const conversa = state.conversations.find((item) => item.id === conversationId);
+    const indice = Number(identificador);
+
+    if (!conversa || !Number.isInteger(indice) || !conversa.messages[indice]) {
+      anunciar("Não foi possível editar a mensagem.");
+      return;
+    }
+
+    const criadoEm = conversa.messages[indice].created_at;
+    conversa.messages.splice(indice);
+    conversa.messages.push({
+      role: "user",
+      content: novoTexto,
+      created_at: criadoEm ?? new Date().toISOString(),
+    });
+    conversa.updated_at = new Date().toISOString();
+    salvarConversasLocais();
+    renderMessages(conversa.messages);
+    renderConversations();
+  }
+
+  anunciar("Mensagem editada. Gerando nova resposta.");
+  await gerarResposta(conversationId, novoTexto, true);
+}
+
+async function regenerarResposta(row) {
+  if (state.sending || !row) {
+    return;
+  }
+
+  let textoUsuario = "";
+  let anterior = row.previousElementSibling;
+
+  while (anterior) {
+    if (anterior.classList.contains("msg-user")) {
+      textoUsuario = anterior.dataset.conteudo ?? "";
+      break;
+    }
+    anterior = anterior.previousElementSibling;
+  }
+
+  if (!textoUsuario.trim()) {
+    anunciar("Não encontrei a pergunta desta resposta.");
+    return;
+  }
+
+  if (AUTH_ENABLED) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, role")
+      .eq("conversation_id", state.currentId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) {
+      anunciar("Não foi possível regenerar a resposta.");
+      return;
+    }
+
+    const respostas = data.filter((message) => message.role === "assistant");
+    if (respostas.length) {
+      const removida = await supabase
+        .from("messages")
+        .delete()
+        .eq("id", respostas[respostas.length - 1].id);
+
+      if (removida.error) {
+        anunciar("Não foi possível regenerar a resposta.");
+        return;
+      }
+    }
+  } else {
+    const conversa = state.conversations.find((item) => item.id === state.currentId);
+    if (conversa) {
+      const indice = conversa.messages.map((message) => message.role).lastIndexOf("assistant");
+      if (indice !== -1) {
+        conversa.messages.splice(indice, 1);
+      }
+      salvarConversasLocais();
+      renderMessages(conversa.messages);
+    }
+  }
+
+  row.remove();
+  atualizarAcoesMensagens();
+  anunciar("Gerando nova resposta...");
+  await gerarResposta(state.currentId, textoUsuario.trim(), true);
+}
+
+async function gerarResposta(conversationId, texto, isRetry = false) {
+  state.abortController = new AbortController();
+  setSending(true);
+
+  try {
+    await runAssistantReply(conversationId, texto, isRetry);
+  } finally {
+    state.abortController = null;
+    setSending(false);
+    if (!AUTH_ENABLED) {
+      salvarConversasLocais();
+    }
+    renderConversations();
+  }
+}
+
+function appendMessage(role, text, identificador = null) {
   el.emptyState.hidden = true;
 
+  const conteudo = role === "assistant" ? normalizarErroVisivel(text) : String(text ?? "");
   const row = document.createElement("div");
   row.className = "msg msg-" + role;
+  row.dataset.messageId = identificador === null || identificador === undefined ? "" : String(identificador);
+  row.dataset.conteudo = conteudo;
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
 
   if (role === "assistant") {
-    renderizarConteudoAssistant(bubble, normalizarErroVisivel(text), null, null, true);
+    renderizarConteudoAssistant(bubble, conteudo, null, null, true);
   } else {
-    bubble.textContent = text;
+    bubble.textContent = conteudo;
   }
 
   row.appendChild(bubble);
+  row.appendChild(criarAcoesMensagem(row, role));
   el.messages.appendChild(row);
+  atualizarAcoesMensagens();
   scrollToBottom(true);
   return bubble;
 }
@@ -1702,7 +2193,12 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
     }
 
     const conteudoFinal = normalizarErroVisivel(accumulated);
+    const linha = assistantBubble.closest(".msg");
+    if (linha) {
+      linha.dataset.conteudo = conteudoFinal;
+    }
     renderizarConteudoAssistant(assistantBubble, conteudoFinal, estadosPlano, estadosPerguntas, true);
+    atualizarAcoesMensagens();
 
     const content = conteudoFinal.trim();
 
@@ -1773,9 +2269,14 @@ async function runAssistantReply(conversationId, text, isRetry = false, needsTit
       return;
     }
   } catch (error) {
-    console.error(error);
     finalizeSegment();
     removeTyping();
+
+    if (error && error.name === "AbortError") {
+      return;
+    }
+
+    console.error(error);
 
     if (error && error.status === 401) {
       if (!AUTH_ENABLED) {
@@ -1810,7 +2311,14 @@ async function handleSessionExpired() {
 async function onSubmit(event) {
   event.preventDefault();
 
-  if (state.sending || (AUTH_ENABLED && !state.session)) {
+  if (state.sending) {
+    if (state.abortController) {
+      state.abortController.abort();
+    }
+    return;
+  }
+
+  if (AUTH_ENABLED && !state.session) {
     return;
   }
 
@@ -1856,21 +2364,30 @@ async function enviarMensagem(texto, { recarregar = true } = {}) {
     && !(conversaAtual.messages ?? []).some((mensagem) => mensagem.role === "assistant"),
   );
 
+  let indiceUsuario = null;
+
   if (!AUTH_ENABLED) {
     salvarMensagemLocal(conversationId, "user", text);
+    const conversaLocal = state.conversations.find((item) => item.id === conversationId);
+    indiceUsuario = Math.max((conversaLocal?.messages.length ?? 1) - 1, 0);
   }
 
+  state.abortController = new AbortController();
   setSending(true);
-  appendMessage("user", text);
+  appendMessage("user", text, AUTH_ENABLED ? null : indiceUsuario);
 
   try {
     await runAssistantReply(conversationId, text, false, precisaTitulo);
   } finally {
+    state.abortController = null;
     setSending(false);
 
     if (recarregar) {
       el.messageInput.focus();
       await loadConversations();
+      if (AUTH_ENABLED && state.currentId === conversationId) {
+        await selectConversation(conversationId);
+      }
     } else {
       if (!AUTH_ENABLED) {
         state.conversations.sort(
@@ -1914,6 +2431,7 @@ async function streamReply(conversationId, content, handlers = {}, isRetry = fal
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    signal: state.abortController?.signal,
   });
 
   if (!response.ok) {
@@ -2038,6 +2556,12 @@ function closeSidebar(returnFocus = false) {
 /* ---------------- Eventos ---------------- */
 
 function bindEvents() {
+  state.fixadas = lerFixadas();
+
+  if (el.guestHint) {
+    el.guestHint.hidden = AUTH_ENABLED;
+  }
+
   if (window.OrganizaTema) {
     window.OrganizaTema.montarBotao(el.loginThemeSlot, "login-theme-toggle");
     window.OrganizaTema.montarBotao(el.themeSlot, "sidebar-theme-toggle");
@@ -2054,6 +2578,22 @@ function bindEvents() {
     await createConversation();
     closeSidebar();
     el.messageInput.focus();
+  });
+
+  el.conversationSearch?.addEventListener("input", () => {
+    state.filtroConversa = el.conversationSearch.value;
+    renderConversations();
+  });
+
+  el.conversationSearch?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !el.conversationSearch.value) {
+      return;
+    }
+
+    event.preventDefault();
+    el.conversationSearch.value = "";
+    state.filtroConversa = "";
+    renderConversations();
   });
 
   el.composer.addEventListener("submit", onSubmit);
@@ -2080,6 +2620,52 @@ function bindEvents() {
 
   el.sidebarToggle.addEventListener("click", openSidebar);
   el.sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
+
+  el.conversationsList.addEventListener("keydown", (event) => {
+    const teclas = ["ArrowDown", "ArrowUp", "Home", "End"];
+    if (!teclas.includes(event.key)) {
+      return;
+    }
+
+    const alvo = event.target;
+
+    if (alvo instanceof Element && alvo.classList.contains("conversation-options")) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        abrirMenuPorBotao(alvo);
+      }
+      return;
+    }
+
+    if (!menuConversaAberto || !(alvo instanceof Node)
+      || !menuConversaAberto.menu.contains(alvo)) {
+      return;
+    }
+
+    const itens = [...menuConversaAberto.menu.querySelectorAll(
+      ".conversation-menu-item, .conversation-menu-btn",
+    )].filter((botao) => !botao.disabled);
+
+    if (!itens.length) {
+      return;
+    }
+
+    event.preventDefault();
+    const atual = itens.indexOf(document.activeElement);
+    let proximo;
+
+    if (event.key === "Home") {
+      proximo = 0;
+    } else if (event.key === "End") {
+      proximo = itens.length - 1;
+    } else if (event.key === "ArrowDown") {
+      proximo = atual < 0 ? 0 : (atual + 1) % itens.length;
+    } else {
+      proximo = atual <= 0 ? itens.length - 1 : atual - 1;
+    }
+
+    itens[proximo].focus();
+  });
 
   document.addEventListener("click", (event) => {
     if (!menuConversaAberto) {
