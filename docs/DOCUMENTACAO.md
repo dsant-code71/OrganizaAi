@@ -217,6 +217,9 @@ Em bancos existentes, `0003` aplica a limpeza.
 - `index.html`: estrutura da lista.
 - `assets/js/todo/todolist.js`: carrega, cria, atualiza, remove, filtra e reordena
   tarefas. Usa `localStorage` no modo visitante ou Supabase no modo autenticado.
+  `Ctrl + Enter` adiciona a tarefa; remover, concluir ou limpar a lista abre um
+  aviso com **Desfazer** (reinsere a tarefa/lista no modo correspondente). O
+  contador mostra concluídas/pendentes e acompanha o filtro ativo.
 - `assets/js/auth/auth.js`: valida a sessão e monta sidebar/conta.
 - `assets/js/core/theme.js`: tema claro/escuro e cor dos detalhes persistidos em
   `localStorage` (`organizaai-tema` e `organizaai-cor-destaque`). A cor de
@@ -227,7 +230,14 @@ Em bancos existentes, `0003` aplica a limpeza.
 
 - `ia/index.html`: login (modo auth) ou interface direta (modo visitante).
 - `assets/js/ia/ia.js`: conversas locais ou Supabase, mensagens, streaming e Markdown
-  sanitizado.
+  sanitizado. A sidebar filtra por título (e por conteúdo no modo visitante),
+  agrupa por "Hoje"/"Últimos 7 dias"/"Mais antigas" e mantém conversas fixadas
+  em `organizaai.estudai.fixadas.v1`. Cada mensagem oferece copiar; respostas
+  podem ser regeneradas e mensagens enviadas podem ser editadas e reenviadas.
+  No modo autenticado, editar apaga o sufixo da mensagem e a reinsere (`messages`
+  não tem política de UPDATE); regenerar apaga a última resposta e pede
+  `retry: true`. Enviar durante o streaming aborta a requisição via
+  `AbortController`.
 - `supabase/functions/chat/index.ts`: valida a sessão no modo autenticado ou
   aceita `guest: true` sem banco; percorre a cadeia de IA (Groq, Gemini e
   OpenRouter), tenta o próximo provedor em `429`/`5xx`/timeout e devolve

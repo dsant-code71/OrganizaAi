@@ -33,6 +33,17 @@ Com `false`:
 - O chat chama a Edge Function com `guest: true`, sem gravar no Postgres.
 - `login.html`, `assets/js/auth/auth.js`, `assets/js/auth/login.js` e as migrations continuam intactos.
 
+### Atalhos e organização
+
+- EstudAI: busque conversas por título (e por conteúdo no modo visitante), fixe
+  conversas no topo e navegue pelo menu de opções com as setas do teclado.
+- EstudAI: cada resposta tem copiar/regenerar; mensagens enviadas podem ser
+  editadas e reenviadas. Durante a geração, o botão Enviar vira Parar.
+- OrganizAI: `Ctrl + Enter` adiciona a tarefa; remover, concluir ou limpar a
+  lista mostra um aviso com **Desfazer**. Os contadores acompanham o filtro.
+- Conversas fixadas ficam em `organizaai.estudai.fixadas.v1` no `localStorage`
+  (preferência local, inclusive no modo autenticado).
+
 Para reativar a autenticação, configure o Google no Supabase e mude a flag para
 `true`.
 
