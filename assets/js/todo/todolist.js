@@ -742,7 +742,7 @@ async function limparTarefas() {
         }
 
         renderizarTarefas();
-        mostrarStatus('Lista limpa.', 'success');
+        mostrarStatus('');
         mostrarToast('Lista limpa.', {
             executar: function () {
                 void restaurarLista(anteriores);
@@ -766,7 +766,7 @@ async function limparTarefas() {
 
         tarefas = [];
         renderizarTarefas();
-        mostrarStatus('Lista limpa.', 'success');
+        mostrarStatus('');
         mostrarToast('Lista limpa.', {
             executar: function () {
                 void restaurarLista(anteriores);
