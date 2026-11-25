@@ -9,6 +9,8 @@ var cliente = null;
 var usuarioAtual = null;
 var tarefas = [];
 var statusTimer = null;
+var toastAtual = null;
+var toastTimer = null;
 var autenticacaoAtiva = window.ORGANIZAAI_AUTH_ENABLED === true;
 var CHAVE_TAREFAS_VISITANTE = 'organizaai.tarefas.visitante.v1';
 
@@ -71,6 +73,48 @@ function mostrarStatus(texto, tipo) {
     }
 }
 
+function fecharToast() {
+    if (toastTimer) {
+        window.clearTimeout(toastTimer);
+        toastTimer = null;
+    }
+
+    if (toastAtual) {
+        toastAtual.remove();
+        toastAtual = null;
+    }
+}
+
+function mostrarToast(texto, acao) {
+    fecharToast();
+
+    var toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.setAttribute('role', 'status');
+
+    var mensagem = document.createElement('span');
+    mensagem.className = 'toast-mensagem';
+    mensagem.textContent = texto;
+    toast.appendChild(mensagem);
+
+    if (acao && typeof acao.executar === 'function') {
+        var botao = document.createElement('button');
+        botao.type = 'button';
+        botao.className = 'toast-acao';
+        botao.textContent = acao.rotulo || 'Desfazer';
+        botao.addEventListener('click', function () {
+            var executar = acao.executar;
+            fecharToast();
+            executar();
+        });
+        toast.appendChild(botao);
+    }
+
+    document.body.appendChild(toast);
+    toastAtual = toast;
+    toastTimer = window.setTimeout(fecharToast, 6500);
+}
+
 function lerTarefasLocais() {
     try {
         var bruto = window.localStorage.getItem(CHAVE_TAREFAS_VISITANTE);
@@ -100,8 +144,22 @@ function salvarTarefasLocais() {
 }
 
 function atualizarContador() {
-    var contador = document.querySelectorAll('#listaTarefas li').length;
-    document.getElementById('count').innerText = 'Tarefas: ' + contador;
+    var total = tarefas.length;
+    var concluidas = tarefas.filter(function (tarefa) {
+        return tarefa.concluida;
+    }).length;
+    var pendentes = total - concluidas;
+    var texto;
+
+    if (filtroAtual === 'concluidas') {
+        texto = 'Concluídas: ' + concluidas + ' de ' + total + ' tarefas';
+    } else if (filtroAtual === 'naoConcluidas') {
+        texto = 'Não concluídas: ' + pendentes + ' de ' + total + ' tarefas';
+    } else {
+        texto = 'Tarefas: ' + total + ' · ' + concluidas + ' concluídas · ' + pendentes + ' pendentes';
+    }
+
+    document.getElementById('count').innerText = texto;
 }
 
 function aplicarEstiloPrioridade(tarefa, prioridade) {
@@ -261,6 +319,9 @@ function adicionarTarefaExistente(tarefa) {
     botaoRemover.addEventListener('click', async function () {
         botaoRemover.disabled = true;
 
+        var indice = tarefas.findIndex(function (item) {
+            return item.id === tarefa.id;
+        });
         var removeu = await removerTarefa(tarefa.id);
 
         if (!removeu) {
@@ -273,6 +334,12 @@ function adicionarTarefaExistente(tarefa) {
             novaTarefa.remove();
             atualizarContador();
         }, 350);
+
+        mostrarToast('Tarefa removida.', {
+            executar: async function () {
+                await restaurarTarefa(tarefa, indice);
+            }
+        });
     });
 
     var botaoConcluir = document.createElement('button');
@@ -301,6 +368,26 @@ function adicionarTarefaExistente(tarefa) {
             botaoConcluir.setAttribute('aria-label', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
             botaoConcluir.setAttribute('aria-pressed', anterior ? 'true' : 'false');
             botaoConcluir.setAttribute('title', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
+        } else {
+            mostrarToast(novo ? 'Tarefa concluída.' : 'Tarefa marcada como pendente.', {
+                executar: async function () {
+                    var voltou = await atualizarTarefa(tarefa.id, anterior, tarefa.prioridade);
+
+                    if (!voltou) {
+                        mostrarStatus('Não foi possível desfazer.', 'error');
+                        return;
+                    }
+
+                    tarefa.concluida = anterior;
+                    novaTarefa.classList.toggle('completed', anterior);
+                    novaTarefa.dataset.concluida = anterior ? 'true' : 'false';
+                    botaoConcluir.setAttribute('aria-label', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
+                    botaoConcluir.setAttribute('aria-pressed', anterior ? 'true' : 'false');
+                    botaoConcluir.setAttribute('title', anterior ? 'Marcar como pendente' : 'Marcar como concluída');
+                    filtrarTarefas(filtroAtual);
+                    mostrarStatus('Ação desfeita.', 'success');
+                }
+            });
         }
 
         filtrarTarefas(filtroAtual);
@@ -578,9 +665,75 @@ async function removerTarefa(id) {
     }
 }
 
-async function limparTarefas() {
+function linhaParaBanco(tarefa) {
+    return {
+        id: tarefa.id,
+        user_id: usuarioAtual.id,
+        texto: tarefa.texto,
+        concluida: tarefa.concluida === true,
+        prioridade: prioridadeParaBanco(tarefa.prioridade),
+        ordem: tarefa.ordem
+    };
+}
+
+async function restaurarTarefa(tarefa, indice) {
     if (!autenticacaoAtiva) {
-        var anteriores = tarefas.slice();
+        var copia = normalizarTarefa(tarefa);
+        tarefas.splice(Math.min(Math.max(indice, 0), tarefas.length), 0, copia);
+
+        if (!salvarTarefasLocais()) {
+            var restaurada = tarefas.indexOf(copia);
+            if (restaurada !== -1) {
+                tarefas.splice(restaurada, 1);
+            }
+            mostrarStatus('Não foi possível desfazer.', 'error');
+            return;
+        }
+    } else {
+        var resposta = await cliente.from('tasks').insert(linhaParaBanco(tarefa));
+
+        if (resposta.error) {
+            console.error('Não foi possível restaurar a tarefa.', resposta.error);
+            mostrarStatus('Não foi possível desfazer.', 'error');
+            return;
+        }
+
+        tarefas.push(normalizarTarefa(tarefa));
+    }
+
+    renderizarTarefas();
+    mostrarStatus('Tarefa restaurada.', 'success');
+}
+
+async function restaurarLista(anteriores) {
+    if (!autenticacaoAtiva) {
+        tarefas = anteriores.map(normalizarTarefa);
+
+        if (!salvarTarefasLocais()) {
+            tarefas = [];
+            mostrarStatus('Não foi possível desfazer.', 'error');
+            return;
+        }
+    } else {
+        var resposta = await cliente.from('tasks').insert(anteriores.map(linhaParaBanco));
+
+        if (resposta.error) {
+            console.error('Não foi possível restaurar a lista.', resposta.error);
+            mostrarStatus('Não foi possível desfazer.', 'error');
+            return;
+        }
+
+        tarefas = anteriores.map(normalizarTarefa);
+    }
+
+    renderizarTarefas();
+    mostrarStatus('Lista restaurada.', 'success');
+}
+
+async function limparTarefas() {
+    var anteriores = tarefas.slice();
+
+    if (!autenticacaoAtiva) {
         tarefas = [];
 
         if (!salvarTarefasLocais()) {
@@ -590,6 +743,11 @@ async function limparTarefas() {
 
         renderizarTarefas();
         mostrarStatus('Lista limpa.', 'success');
+        mostrarToast('Lista limpa.', {
+            executar: function () {
+                void restaurarLista(anteriores);
+            }
+        });
         return;
     }
 
@@ -609,6 +767,11 @@ async function limparTarefas() {
         tarefas = [];
         renderizarTarefas();
         mostrarStatus('Lista limpa.', 'success');
+        mostrarToast('Lista limpa.', {
+            executar: function () {
+                void restaurarLista(anteriores);
+            }
+        });
     } catch (erro) {
         console.error('Não foi possível limpar as tarefas.', erro);
         mostrarStatus('Não foi possível limpar a lista.', 'error');
@@ -637,6 +800,8 @@ function filtrarTarefas(filtro) {
                 break;
         }
     });
+
+    atualizarContador();
 }
 
 function montarControles() {
@@ -694,10 +859,19 @@ function ligarEventos() {
     });
 
     tarefaInput.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Enter') {
+        if (evento.key === 'Enter' && !evento.ctrlKey && !evento.metaKey) {
             evento.preventDefault();
             void adicionarTarefa();
         }
+    });
+
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key !== 'Enter' || !(evento.ctrlKey || evento.metaKey)) {
+            return;
+        }
+
+        evento.preventDefault();
+        void adicionarTarefa();
     });
 }
 

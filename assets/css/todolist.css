@@ -116,6 +116,12 @@ button:active {
     letter-spacing: 0.2px;
 }
 
+.input-hint {
+    margin: -6px 4px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 #divFiltros {
     display: flex;
     gap: 8px;
@@ -496,4 +502,44 @@ li.task-item.completed .remove-btn:hover {
         width: 40px;
         padding: 0;
     }
+}
+
+/* Avisos com ação (desfazer) */
+
+.toast {
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(380px, calc(100vw - 32px));
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.toast-mensagem {
+    flex: 1;
+}
+
+.toast-acao {
+    padding: 6px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-pill);
+    color: var(--accent);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.toast-acao:hover {
+    background: var(--surface-3);
 }
